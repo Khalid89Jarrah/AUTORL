@@ -5,7 +5,7 @@ from rclpy.node import Node
 
 class MotorHandler:
     def __init__(self, node, topic_name="/MOTOR_SPEED"):
-        self.node = node  
+        self.node = node
         self.topic_name = topic_name
         self.publisher = self.node.create_publisher(Actuators, self.topic_name, 10)
 
