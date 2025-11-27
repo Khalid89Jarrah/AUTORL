@@ -9,7 +9,7 @@ matplotlib.use("Agg")
 import rclpy
 from dataclasses import dataclass
 from stable_baselines3.common.env_checker import check_env
-from sensor_interaction.autorl_world import Auto_RF
+from sensor_interaction.autorl_world import Auto_RL
 
 
 def frd_to_flu(v):
