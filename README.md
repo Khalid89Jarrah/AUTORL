@@ -18,7 +18,7 @@ This project integrates:
 To build and source the ROS 2 workspace, run:
 
 ```bash
-cd /opt/quadri_ws/src
+cd /opt/autorl_ws/src
 . colcon_build
 
 ```

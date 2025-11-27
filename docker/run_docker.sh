@@ -20,8 +20,8 @@ sudo docker run -it --privileged \
   --entrypoint=/bin/bash \
   -p 6006:6006/udp \
   --rm \
-  -v "$SRC_PATH":/opt/quadri_ws/src \
-  -v "$MODEL_PATH":/opt/quadri_ws/models \
+  -v "$SRC_PATH":/opt/autorl_ws/src \
+  -v "$MODEL_PATH":/opt/autorl_ws/models \
   --net=host --entrypoint='/bin/bash' --device /dev/dri \
   --env="DISPLAY" \
   --env="QT_X11_NO_MITSHM=1" \

@@ -1,5 +1,5 @@
 #!/bin/bash
-cd /opt/quadrl_ws
+cd /opt/autorl_ws
 
 MAKEFLAGS="-j $(( $(nproc) / 2 ))" colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo
-source /opt/quadrl_ws/install/setup.bash
+source /opt/autorl_ws/install/setup.bash
