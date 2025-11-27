@@ -115,16 +115,15 @@ ENV GZ_VERSION=harmonic
 # Setup the workspace
 RUN mkdir -p /opt/ws_ros_gz/src && \
     cd /opt/ws_ros_gz/src && \
-    git clone https://github.com/gazebosim/ros_gz.git -b ros2 && \
+    git clone https://github.com/gazebosim/ros_gz.git -b jazzy && \
     sudo rosdep init && \
     rosdep update 
 
 
 RUN cd /opt/ws_ros_gz/ && \
     rosdep install -r --from-paths src -i -y --rosdistro jazzy
-   
+
 RUN cd /opt/ws_ros_gz/ && \
-    apt-get install -y ros-jazzy-gz-tools-vendor ros-jazzy-gz-sim-vendor ros-jazzy-ament-cmake && \
     bash -c "source /opt/ros/jazzy/setup.bash && MAKEFLAGS='-j$(($(nproc)/2))' colcon build"
 
 RUN echo "source /opt/ws_ros_gz/install/setup.bash" >> ~/.bashrc
@@ -142,9 +141,7 @@ RUN /opt/virtual_env/bin/pip install transforms3d
 # Set the virtual environment's bin directory in PATH
 ENV PATH="/opt/virtual_env/bin:$PATH"
 
-
-
-# Set the working directory (optional)
+# Set the working directory
 WORKDIR /opt
 
 # Set the entrypoint
