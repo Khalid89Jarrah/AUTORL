@@ -70,7 +70,7 @@ def write_training_info(data, out_path):
     with open(out_path, "w", encoding="utf-8") as f:
         f.write("### PPO Training Metadata Export ###\n\n")
 
-        #  Summary Table 
+        #  Summary Table
         f.write(" Parameters Required for Online Tuning \n")
         f.write(
             "+----------------------+-----------------------------+------------------+\n"
@@ -86,7 +86,6 @@ def write_training_info(data, out_path):
             if k in data:
                 return safe_val(data[k])
             return "—"
-
 
         obs_mean = obs_var = "—"
         if "obs_rms" in data and isinstance(data["obs_rms"], dict):
@@ -119,7 +118,7 @@ def write_training_info(data, out_path):
             "+----------------------+-----------------------------+------------------+\n\n"
         )
 
-        #  Core PPO Hyperparameters 
+        #  Core PPO Hyperparameters
         f.write(" Core PPO Hyperparameters \n")
         for key in [
             "n_steps",
@@ -156,7 +155,7 @@ def write_training_info(data, out_path):
             f.write(f"clip_obs: {safe_val(data['clip_obs'])}\n")
         f.write("\n")
 
-        # Observation and Action Space Bounds 
+        # Observation and Action Space Bounds
         f.write(" Spaces (shapes and bounds) \n")
         obs = data.get("observation_space", {})
         act = data.get("action_space", {})
@@ -194,7 +193,7 @@ def write_training_info(data, out_path):
                 f.write(f"{key}: {safe_val(data[key])}\n")
         f.write("\n")
 
-        #  All Remaining Keys (raw) 
+        #  All Remaining Keys (raw)
         f.write(" All Remaining Keys (raw) \n")
         for k, v in data.items():
             if k not in [

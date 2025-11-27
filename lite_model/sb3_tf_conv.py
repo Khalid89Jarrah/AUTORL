@@ -9,14 +9,14 @@ from stable_baselines3 import PPO
 
 
 class OnnxablePolicy(torch.nn.Module):
-    #Exports PPO policy network identical to runtime behaviour (includes tanh)
+    # Exports PPO policy network identical to runtime behaviour (includes tanh)
 
     def __init__(self, policy):
         super().__init__()
         self.policy = torch.nn.Sequential(
             policy.mlp_extractor.policy_net,
             policy.action_net,
-            torch.nn.Tanh(), 
+            torch.nn.Tanh(),
         )
 
     def forward(self, obs):
