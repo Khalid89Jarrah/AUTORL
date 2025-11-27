@@ -1,6 +1,6 @@
 # AUTORL
 
-Hybrid Reinforcement Learning (RL) training of the rate controller using ROS 2 and Gazebo.
+Hybrid Reinforcement Learning (RL) training of the attitude controller using ROS 2 and Gazebo.
 
 ---
 
