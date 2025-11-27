@@ -1,0 +1,60 @@
+SIM_GZ_EN: 1 # Simulator Gazebo bridge enable
+
+SENS_EN_GPSSIM: 1
+SENS_EN_BAROSIM: 0
+SENS_EN_MAGSIM: 1
+
+CA_AIRFRAME: 0 # Multirotor airframe selected
+CA_ROTOR_COUNT: 4 # Quad rotor
+
+rotors:
+  CA_ROTOR0:
+    PX: 0.13
+    PY: 0.22
+    KM: 0.05
+    CT: 6.5
+    AX: 0.0
+    AY: 0.0
+    AZ: -1.0
+  CA_ROTOR1:
+    PX: -0.13
+    PY: -0.20
+    KM: 0.05
+    CT: 6.5
+    AX: 0.0
+    AY: 0.0
+    AZ: -1.0
+  CA_ROTOR2:
+    PX: 0.13
+    PY: -0.22
+    KM: -0.05
+    CT: 6.5
+    AX: 0.0
+    AY: 0.0
+    AZ: -1.0
+  CA_ROTOR3:
+    PX: -0.13
+    PY: 0.20
+    KM: -0.05
+    CT: 6.5
+    AX: 0.0
+    AY: 0.0
+    AZ: -1.0
+
+SIM_GZ_EC_FUNC1: 101 # SIM_GZ ESC 1 -> motor1
+SIM_GZ_EC_FUNC2: 102
+SIM_GZ_EC_FUNC3: 103
+SIM_GZ_EC_FUNC4: 104
+
+SIM_GZ_EC_MIN1: 150 # SIM_GZ ESC 1 Minimum Value
+SIM_GZ_EC_MIN2: 150
+SIM_GZ_EC_MIN3: 150
+SIM_GZ_EC_MIN4: 150
+
+SIM_GZ_EC_MAX1: 1000 # SIM_GZ ESC 1 Miximum Value
+SIM_GZ_EC_MAX2: 1000
+SIM_GZ_EC_MAX3: 1000
+SIM_GZ_EC_MAX4: 1000
+
+MPC_THR_HOVER: 0.60 # Vertical thrust required to hover
+NAV_DLL_ACT: 2 #Set GCS connection loss failsafe mode -> return mode
