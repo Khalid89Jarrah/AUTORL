@@ -1,5 +1,5 @@
 from gymnasium.envs.registration import register
-from sensor_interaction.quad_world import Auto_RL
+from sensor_interaction.autorl_world import Auto_RL
 from sensor_interaction.MainNode import MainNode
 
 

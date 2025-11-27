@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import gymnasium as gym
 from stable_baselines3 import PPO
-from sensor_interaction.quad_world import Auto_RL
+from sensor_interaction.autorl_world import Auto_RL
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.vec_env import SubprocVecEnv
 from stable_baselines3.common.env_util import make_vec_env
@@ -78,7 +78,7 @@ def train_model(
     batch_size=64,
     n_epochs=10,
     horizon=2048,
-    model_save_path="/opt/quadrl_ws/models/{MODEL_BASENAME}.zip",
+    model_save_path="/opt/autorl_ws/models/{MODEL_BASENAME}.zip",
 ):
     if START_TRAINING_FROM == 0:
         model = PPO(
@@ -95,7 +95,7 @@ def train_model(
         )
         print("Starting PPO training from scratch.")
     else:
-        model_path = f"/opt/quadrl_ws/models/{MODEL_BASENAME}_{START_TRAINING_FROM}.zip"
+        model_path = f"/opt/autorl_ws/models/{MODEL_BASENAME}_{START_TRAINING_FROM}.zip"
         print(f"Continuing training from checkpoint: {model_path}")
         model = PPO.load(model_path, env=env)
 
@@ -171,7 +171,7 @@ def train_model(
 
         plt.pause(0.1)
 
-        model_filename = f"/opt/quadrl_ws/models/{MODEL_BASENAME}_{START_TRAINING_FROM + episode + EVAL_INTERVAL_EPISODES}.zip"
+        model_filename = f"/opt/autorl_ws/models/{MODEL_BASENAME}_{START_TRAINING_FROM + episode + EVAL_INTERVAL_EPISODES}.zip"
         model.save(model_filename)
         print(f"Model saved: {model_filename}")
 

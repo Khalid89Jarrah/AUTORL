@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import rclpy
 from dataclasses import dataclass
-from sensor_interaction.quad_world import Auto_RL
+from sensor_interaction.autorl_world import Auto_RL
 from stable_baselines3.common.env_checker import check_env
 
 
