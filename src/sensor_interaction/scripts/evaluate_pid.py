@@ -317,7 +317,7 @@ def evaluate_pid(
 
 def main(args=None):
     rclpy.init(args=args)
-    env = gym.make("Autopilot-RF-v0")
+    env = gym.make("Autopilot-RL-v0")
     check_env(env)
     pid = PIDRateController(
         kp=(0.11, 0.14, 0.30),

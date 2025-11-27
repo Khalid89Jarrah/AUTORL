@@ -87,7 +87,7 @@ def test_environment_determinism(env, eval_setpoints_frd, steps=100):
 
 def main(args=None):
     rclpy.init(args=args)
-    env = gym.make("Autopilot-RF-v0")
+    env = gym.make("Autopilot-RL-v0")
     check_env(env)
     print("Starting deterministic environment test (headless)…")
 

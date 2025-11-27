@@ -230,7 +230,7 @@ def evaluate_model(env, model, num_episodes=5):
 
 def main(args=None):
     rclpy.init(args=args)
-    env = gym.make("Autopilot-RF-v0")
+    env = gym.make("Autopilot-RL-v0")
     check_env(env)
 
     logger = rclpy.logging.get_logger("my_logger")
