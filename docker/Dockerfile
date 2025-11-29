@@ -128,15 +128,18 @@ RUN cd /opt/ws_ros_gz/ && \
 
 RUN echo "source /opt/ws_ros_gz/install/setup.bash" >> ~/.bashrc
 
-
 # Create a Python virtual environment
 RUN python3 -m venv /opt/virtual_env
 
 RUN /opt/virtual_env/bin/pip install --upgrade pip
+  
+RUN /opt/virtual_env/bin/pip install \
+    stable-baselines3[extra]==2.4.0  \
+    PyYAML==6.0.2 \
+    tensorflow==2.18.0 \
+    catkin-pkg==1.0.0 \
+    gymnasium==1.0.0 
 
-RUN /opt/virtual_env/bin/pip install tensorflow catkin_pkg gymnasium stable-baselines3[extra] pyyaml 
-
-RUN /opt/virtual_env/bin/pip install transforms3d
 
 # Set the virtual environment's bin directory in PATH
 ENV PATH="/opt/virtual_env/bin:$PATH"
