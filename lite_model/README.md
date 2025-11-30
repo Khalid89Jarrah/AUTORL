@@ -34,15 +34,16 @@ source sb3_venv_v_3.9/bin/activate
 pip install --upgrade pip
 
 # Install core dependencies
-pip install gymnasium pyglet torch torchsummary stable-baselines3 \
+pip install gymnasium==1.1.1 pyglet==2.1.11 torch==2.8.0 torchsummary==1.5.1 stable-baselines3==2.7.0 \
   tensorflow==2.10.0 onnx==1.12.0 onnx-tf==1.9.0 protobuf==3.19.6 \
-  --extra-index-url https://google-coral.github.io/py-repo/ pycoral~=2.0 \
-  --extra-index-url https://google-coral.github.io/py-repo/ tflite_runtime
+  --extra-index-url https://google-coral.github.io/py-repo/ pycoral==2.0.0 \
+  --extra-index-url https://google-coral.github.io/py-repo/ tflite-runtime==2.5.0.post1
 
 # Compatibility fixes
-pip install "numpy<2"
-pip install "shimmy>=2.0"
+pip install "numpy==1.26.4"
+pip install "shimmy==2.0.0"
 pip install "gymnasium[box2d]"
+# box2d-py installed as: box2d-py==2.3.5
 
 # Convert SB3 model to TFLite
 python3 /path/to/lite_model/sb3_tf_conv.py --path models/ppo_model.zip
