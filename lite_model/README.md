@@ -6,6 +6,19 @@ This README contains all the steps required to set up the environment, convert a
 
 ## Commands
 
+> **Note:**  
+> As you finished the model and saved it in your workspace directory, create a new
+> virtual environment on the host to isolate it.  
+> Alternatively, you can mount or copy the `lite_model` into the Docker container
+> and run it there.
+
+> **Note:** 
+>If IPv6 is advertised by the network but IPv6 TCP traffic is not routed, causing connections to hang, Run this:
+> ```bash
+> echo "precedence ::ffff:0:0/96 100" >> /etc/gai.conf
+> ```
+
+
 ```bash
 # Update system and install Python 3.9
 sudo apt update
@@ -21,7 +34,7 @@ source sb3_venv_v_3.9/bin/activate
 pip install --upgrade pip
 
 # Install core dependencies
-pip install gymnasium pyglet torch torchsummary stable-baselines3 stable-baselines3[extra] \
+pip install gymnasium pyglet torch torchsummary stable-baselines3 \
   tensorflow==2.10.0 onnx==1.12.0 onnx-tf==1.9.0 protobuf==3.19.6 \
   --extra-index-url https://google-coral.github.io/py-repo/ pycoral~=2.0 \
   --extra-index-url https://google-coral.github.io/py-repo/ tflite_runtime
@@ -35,7 +48,11 @@ pip install "gymnasium[box2d]"
 python3 /path/to/lite_model/sb3_tf_conv.py --path models/ppo_model.zip
 
 # Test quantized TFLite model
-python3 /path_to/lite_model/sb3_tf_conv_test.py --zip models/ppo_model.zip --tflite ppo_model_episode_quant.tflite --n 100000
+# This script compares the original SB3 PPO policy outputs against the quantized TFLite 
+# model across thousands of random observations. It reports accuracy metrics and 
+# inference latency to #verify that the TFLite model is equivalent and ready for deployment.
+
+python3 /path_to/lite_model/sb3_tf_conv_test.py --zip models/ppo_model.zip --tflite /path_to/lite_model/ppo_model_episode_quant.tflite --n 100000
 ```
 
 
@@ -45,11 +62,11 @@ python3 /path_to/lite_model/sb3_tf_conv_test.py --zip models/ppo_model.zip --tfl
 These scripts extract and inspect the architecture, weights, and training metadata of a Stable-Baselines3 PPO model.
 ```bash
 # Run architecture/weights extractor
-python3 architecture.py --model your_model.zip
+python3 lite_model/print_architecture.py --model your_model.zip
 ```
 
 To print all training related information (hyperparameters, normalization stats, spaces, etc.) into a readable file do
 ```bash
 # Run training info extractor
-python3 training_info.py --model your_model.zip
+python3 lite_model/print_training_info.py --model your_model.zip
 ```
