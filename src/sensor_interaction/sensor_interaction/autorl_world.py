@@ -205,7 +205,7 @@ class Auto_RL(gym.Env):
 
         # --- Overshoot penalty ---
         sgn = np.sign(angular_velocity_setpoint)
-        signed_error = sgn * angular_velocity_error
+        signed_error = sgn * (actual_angular_velocity - angular_velocity_setpoint)
         overshoot = np.clip(signed_error, 0.0, None)
         R_overshoot = -2.0 * np.linalg.norm(overshoot) ** 2
 
