@@ -40,6 +40,16 @@ def generate_launch_description():
     declare_mode_argument = DeclareLaunchArgument(
         "mode", default_value="training", description="Mode: training or evaluate"
     )
+    declare_seed_argument = DeclareLaunchArgument(
+        "seed",
+        default_value="0",
+        description="Random seed for training (Campaign A: 0..4)",
+    )
+    declare_timesteps_argument = DeclareLaunchArgument(
+        "timesteps",
+        default_value="0",
+        description="Total training timesteps. Must be > 0; training aborts otherwise.",
+    )
 
     # Choose GUI or No-GUI mode
     gz_sim = IncludeLaunchDescription(
@@ -69,6 +79,12 @@ def generate_launch_description():
         package="sensor_interaction",
         executable="ppo_train.py",
         output="screen",
+        arguments=[
+            "--seed",
+            LaunchConfiguration("seed"),
+            "--timesteps",
+            LaunchConfiguration("timesteps"),
+        ],
         condition=IfCondition(
             PythonExpression(
                 [
@@ -170,6 +186,8 @@ def generate_launch_description():
             declare_gui_argument,
             declare_algo_argument,
             declare_mode_argument,
+            declare_seed_argument,
+            declare_timesteps_argument,
             gz_sim,
             gz_sim_no_gui,
             bridge,
@@ -184,5 +202,5 @@ def generate_launch_description():
 ros2 launch sensor_interaction node_launch.py algorithm:=ppo gui:=false mode:=test_determinism
 ros2 launch sensor_interaction node_launch.py algorithm:=pid gui:=false mode:=evaluate
 ros2 launch sensor_interaction node_launch.py algorithm:=ppo gui:=false mode:=evaluate model_path:="/opt/autorl_ws/models/ppo_model.zip"
-ros2 launch sensor_interaction node_launch.py algorithm:=ppo gui:=false mode:=training 
+ros2 launch sensor_interaction node_launch.py algorithm:=ppo gui:=false mode:=training seed:=0 timesteps:=2000000
 """

@@ -1,28 +1,67 @@
 #!/usr/bin/env python3
-import gymnasium as gym
-from stable_baselines3 import PPO
-from sensor_interaction.autorl_world import Auto_RL
-from stable_baselines3.common.env_checker import check_env
-from stable_baselines3.common.vec_env import SubprocVecEnv
-from stable_baselines3.common.env_util import make_vec_env
-import rclpy
-from tqdm import tqdm
-import time
-import matplotlib.pyplot as plt
-import logging
-import numpy as np
 import os
-from sensor_interaction.MainNode import MainNode
-import subprocess
-import psutil
 import sys
 import time
 import csv
 
+# Headless: the training node runs under `ros2 launch` with no display, so the
+# Agg backend must be selected BEFORE pyplot is imported. (The evaluation
+# scripts already do this; this one previously did not and called plt.show().)
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
+import numpy as np
+import psutil
+import rclpy
+import gymnasium as gym
+
+from stable_baselines3 import PPO
+from stable_baselines3.common.env_checker import check_env
+from stable_baselines3.common.utils import set_random_seed
+
+from sensor_interaction.autorl_world import Auto_RL
+from sensor_interaction.MainNode import MainNode
+
+# ---------------------------------------------------------------------------
+# Campaign A configuration
+# ---------------------------------------------------------------------------
+# EVAL_INTERVAL_EPISODES * max_steps timesteps are collected between each
+# checkpoint + evaluation. With max_steps = 400 this is 400_000 timesteps,
+# identical to the previous behaviour.
 EVAL_INTERVAL_EPISODES = 1000
-START_TRAINING_FROM = 0  # 0 = fresh start, or e.g. 8000 to continue training
-TOTAL_EPISODES = 1000000  # total number of training episodes
-MODEL_BASENAME = "ppo_model_ref"  # base name for model files
+
+# 0 = fresh start, or e.g. 400000 to continue from that timestep checkpoint.
+# NOTE: this is now counted in TIMESTEPS, not episodes.
+START_TRAINING_FROM = 0
+
+MODEL_BASENAME = "ppo_model_ref"
+MODEL_DIR = "/opt/autorl_ws/models"
+LOG_DIR = "./training_logs"
+TB_DIR = "./ppo_tensorboard"
+
+# PPO hyperparameters (unchanged from the published configuration)
+GAMMA = 0.99
+LEARNING_RATE = 1e-4
+BATCH_SIZE = 64
+N_EPOCHS = 10
+HORIZON = 2048
+
+
+# ---------------------------------------------------------------------------
+# Command line / environment configuration
+# ---------------------------------------------------------------------------
+def _take_int_flag(flag, env_var, default):
+    """Read an integer from `--flag N` (removing it from sys.argv so rclpy never
+    sees it), falling back to an environment variable, then to `default`."""
+    if flag in sys.argv:
+        i = sys.argv.index(flag)
+        if i + 1 < len(sys.argv):
+            value = int(sys.argv[i + 1])
+            del sys.argv[i : i + 2]
+            return value
+    return int(os.environ.get(env_var, default))
 
 
 # Get the PIDs of Gazebo and ROS-related bridges
@@ -69,17 +108,80 @@ def close(main_node):
                 sys.exit(0)
 
 
+def _write_progress_csv(csv_path, history):
+    """Rewrite the full progress CSV after every evaluation, so a run that is
+    killed part-way still leaves a complete, readable learning curve on disk."""
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(
+            [
+                "timesteps",
+                "avg_reward",
+                "avg_action_magnitude",
+                "avg_angular_velocity_error",
+                "avg_episode_length",
+            ]
+        )
+        for row in zip(
+            history["timesteps"],
+            history["reward"],
+            history["action_magnitude"],
+            history["angular_velocity_error"],
+            history["episode_length"],
+        ):
+            writer.writerow(row)
+
+
+def _save_progress_plot(png_path, history):
+    """Static learning-curve figure (no interactive display: headless run)."""
+    if not history["timesteps"]:
+        return
+
+    fig, axs = plt.subplots(4, 1, figsize=(10, 12), sharex=True)
+    series = [
+        (history["reward"], "Average Reward", "Training Progress - PPO"),
+        (history["action_magnitude"], "Mean Action Magnitude", "Action Magnitude"),
+        (
+            history["angular_velocity_error"],
+            "Mean Tracking Error",
+            "Tracking Error (Angular Velocity)",
+        ),
+        (history["episode_length"], "Steps per Episode", "Episode Lengths"),
+    ]
+    for ax, (data, ylabel, title) in zip(axs, series):
+        ax.plot(history["timesteps"], data, marker="o", linestyle="-")
+        ax.set_title(title)
+        ax.set_ylabel(ylabel)
+        ax.grid(True, alpha=0.3)
+    axs[-1].set_xlabel("Timesteps")
+
+    fig.tight_layout()
+    fig.savefig(png_path, dpi=150)
+    plt.close(fig)
+
+
 def train_model(
     env,
-    episodes,
+    total_timesteps,
     max_steps,
-    gamma=0.99,
-    learning_rate=1e-4,
-    batch_size=64,
-    n_epochs=10,
-    horizon=2048,
-    model_save_path="/opt/autorl_ws/models/{MODEL_BASENAME}.zip",
+    seed,
+    run_tag,
+    gamma=GAMMA,
+    learning_rate=LEARNING_RATE,
+    batch_size=BATCH_SIZE,
+    n_epochs=N_EPOCHS,
+    horizon=HORIZON,
 ):
+    os.makedirs(MODEL_DIR, exist_ok=True)
+    os.makedirs(LOG_DIR, exist_ok=True)
+
+    # FIX: this path was previously a plain string containing the literal text
+    # "{MODEL_BASENAME}", not an f-string, so the final model was written to a
+    # file actually named "{MODEL_BASENAME}.zip".
+    model_save_path = f"{MODEL_DIR}/{run_tag}.zip"
+    csv_path = f"{LOG_DIR}/{run_tag}_progress.csv"
+    png_path = f"{LOG_DIR}/{run_tag}_progress.png"
+
     if START_TRAINING_FROM == 0:
         model = PPO(
             "MlpPolicy",
@@ -89,49 +191,37 @@ def train_model(
             batch_size=batch_size,
             n_epochs=n_epochs,
             n_steps=horizon,
-            tensorboard_log="./ppo_tensorboard/",
+            tensorboard_log=f"{TB_DIR}/seed_{seed}/",
             verbose=1,
             device="cpu",
+            seed=seed,
         )
-        print("Starting PPO training from scratch.")
+        print(f"Starting PPO training from scratch (seed={seed}).")
     else:
-        model_path = f"/opt/autorl_ws/models/{MODEL_BASENAME}_{START_TRAINING_FROM}.zip"
+        model_path = f"{MODEL_DIR}/{run_tag}_{START_TRAINING_FROM}.zip"
         print(f"Continuing training from checkpoint: {model_path}")
-        model = PPO.load(model_path, env=env)
-
-    total_timesteps = max_steps * episodes
+        model = PPO.load(model_path, env=env, seed=seed)
 
     save_interval = EVAL_INTERVAL_EPISODES * max_steps
 
-    # Initialize lists to track training metrics
-    reward_history = []
-    action_magnitude_history = []
-    angular_velocity_error_history = []
-    episode_length_history = []
-    episode_numbers = []
+    # Training metrics. These lists were previously created and never appended
+    # to, so every plot produced by this script was empty.
+    history = {
+        "timesteps": [],
+        "reward": [],
+        "action_magnitude": [],
+        "angular_velocity_error": [],
+        "episode_length": [],
+    }
 
-    # Initialize live plot
-    plt.ion()
-    fig, axs = plt.subplots(4, 1, figsize=(10, 12))
+    elapsed = 0
+    while elapsed < total_timesteps:
+        chunk = min(save_interval, total_timesteps - elapsed)
+        model.learn(total_timesteps=chunk, reset_num_timesteps=False)
+        elapsed += chunk
+        absolute_timesteps = START_TRAINING_FROM + elapsed
 
-    axs[0].set_title("Training Progress - PPO")
-    axs[0].set_ylabel("Average Reward")
-
-    axs[1].set_title("Action Magnitude")
-    axs[1].set_ylabel("Mean Action Magnitude")
-
-    axs[2].set_title("Tracking Error (Angular Velocity)")
-    axs[2].set_ylabel("Mean Tracking Error")
-
-    axs[3].set_title("Episode Lengths")
-    axs[3].set_ylabel("Steps per Episode")
-    axs[3].set_xlabel("Episodes")
-
-    for episode in range(0, episodes, EVAL_INTERVAL_EPISODES):
-        print(f"type model is {type(model.policy)}")
-        model.learn(total_timesteps=save_interval, reset_num_timesteps=False)
-
-        # Evaluate model after every EVAL_INTERVAL_EPISODES episodes
+        # Evaluate the current policy
         (
             avg_reward,
             avg_action_magnitude,
@@ -139,46 +229,34 @@ def train_model(
             avg_episode_length,
         ) = evaluate_model(env, model, num_episodes=10)
 
-        # Store results
-        model.logger.record("train/action_magnitude", avg_action_magnitude)
-        model.logger.record("train/value_estimate", np.mean(avg_reward))
-        model.logger.record("train/advantage", np.mean(avg_angular_velocity_error))
-        model.logger.record("rollout/reward_std", np.std(avg_reward))
+        history["timesteps"].append(absolute_timesteps)
+        history["reward"].append(float(avg_reward))
+        history["action_magnitude"].append(float(avg_action_magnitude))
+        history["angular_velocity_error"].append(float(avg_angular_velocity_error))
+        history["episode_length"].append(float(avg_episode_length))
 
-        model.logger.dump(step=episode + EVAL_INTERVAL_EPISODES)
+        model.logger.record("eval/avg_reward", float(avg_reward))
+        model.logger.record("eval/action_magnitude", float(avg_action_magnitude))
+        model.logger.record(
+            "eval/angular_velocity_error", float(avg_angular_velocity_error)
+        )
+        model.logger.record("eval/episode_length", float(avg_episode_length))
+        model.logger.dump(step=absolute_timesteps)
 
-        # Update live plots
-        for i, data, ylabel in zip(
-            range(4),
-            [
-                reward_history,
-                action_magnitude_history,
-                angular_velocity_error_history,
-                episode_length_history,
-            ],
-            [
-                "Average Reward",
-                "Mean Action Magnitude",
-                "Mean Tracking Error",
-                "Steps per Episode",
-            ],
-        ):
-            axs[i].clear()
-            axs[i].plot(episode_numbers, data, marker="o", linestyle="-")
-            axs[i].set_ylabel(ylabel)
-            if i == 3:
-                axs[i].set_xlabel("Episodes")
+        _write_progress_csv(csv_path, history)
+        _save_progress_plot(png_path, history)
 
-        plt.pause(0.1)
-
-        model_filename = f"/opt/autorl_ws/models/{MODEL_BASENAME}_{START_TRAINING_FROM + episode + EVAL_INTERVAL_EPISODES}.zip"
+        model_filename = f"{MODEL_DIR}/{run_tag}_{absolute_timesteps}.zip"
         model.save(model_filename)
-        print(f"Model saved: {model_filename}")
+        print(
+            f"[seed {seed}] {absolute_timesteps}/{START_TRAINING_FROM + total_timesteps} "
+            f"timesteps - checkpoint saved: {model_filename}"
+        )
 
     model.save(model_save_path)
     print(f"Final model saved as: {model_save_path}")
-    plt.ioff()
-    plt.show()
+    print(f"Progress CSV: {csv_path}")
+    print(f"Progress plot: {png_path}")
 
 
 def evaluate_model(env, model, num_episodes=5):
@@ -229,17 +307,46 @@ def evaluate_model(env, model, num_episodes=5):
 
 
 def main(args=None):
+    # Parsed and stripped from sys.argv before rclpy.init sees them.
+    seed = _take_int_flag("--seed", "AUTORL_SEED", 0)
+    total_timesteps = _take_int_flag("--timesteps", "AUTORL_TIMESTEPS", 0)
+
+    if total_timesteps <= 0:
+        print(
+            "ERROR: no training budget given.\n"
+            "  Set it explicitly, e.g.\n"
+            "    ros2 launch sensor_interaction node_launch.py algorithm:=ppo "
+            "gui:=false mode:=training seed:=0 timesteps:=2000000\n"
+            "  or export AUTORL_TIMESTEPS=2000000\n"
+            "  Choose the value from where rollout/ep_rew_mean plateaus in your "
+            "existing ppo_tensorboard logs."
+        )
+        sys.exit(1)
+
+    run_tag = f"{MODEL_BASENAME}_seed{seed}"
+
     rclpy.init(args=args)
     env = gym.make("Autopilot-RL-v0")
     check_env(env)
 
+    # Seed everything: python/numpy/torch via SB3, the env RNG that samples the
+    # angular-velocity setpoint, and the action space sampler.
+    set_random_seed(seed)
+    env.reset(seed=seed)
+    env.action_space.seed(seed)
+
     logger = rclpy.logging.get_logger("my_logger")
-    logger.info("Starting PPO training")
+    logger.info(f"Starting PPO training (seed={seed}, timesteps={total_timesteps})")
     try:
         max_steps = env.spec.max_episode_steps
-        num_episodes = TOTAL_EPISODES
         start_time = time.time()  # Store start time
-        train_model(env, episodes=num_episodes, max_steps=max_steps)
+        train_model(
+            env,
+            total_timesteps=total_timesteps,
+            max_steps=max_steps,
+            seed=seed,
+            run_tag=run_tag,
+        )
         end_time = time.time()  # Store end time
         print(
             f"Training time: {end_time - start_time:.2f} seconds"

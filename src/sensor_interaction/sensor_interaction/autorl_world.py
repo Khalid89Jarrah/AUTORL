@@ -52,7 +52,10 @@ class Auto_RL(gym.Env):
         if eval_setpoint is not None:
             self.angular_velocity_sp = eval_setpoint
         else:
-            self.angular_velocity_sp = np.random.normal(
+            # NOTE: uses self.np_random (seeded by super().reset(seed=seed) above),
+            # NOT the global np.random. Without this, reset(seed=...) has no effect
+            # on the sampled setpoint and per-seed runs are not reproducible.
+            self.angular_velocity_sp = self.np_random.normal(
                 loc=0.0, scale=0.3, size=3
             ).astype(np.float32)
 

@@ -14,6 +14,15 @@ class SimulationStepHandler:
 
     def perform_simulation_step(self, steps=1, timeout=5.0):
         """Perform a simulation step and wait for the response."""
+        # Arm the handshake for THIS call.
+        # threading.Event stays set until explicitly cleared: without these two
+        # lines the event remains set after the first successful step, so every
+        # subsequent wait() returns immediately and self.response holds a stale
+        # result from an earlier call. Clearing here is what makes the blocking
+        # step guarantee actually hold on every step, not just the first.
+        self.response_event.clear()
+        self.response = None
+
         # Prepare the request
         request = ControlWorld.Request()
         world_reset = WorldReset()
