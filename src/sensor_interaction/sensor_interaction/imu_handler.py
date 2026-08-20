@@ -29,7 +29,7 @@ class IMUHandler:
         self.imu_data = msg
         self.data_event.set()
 
-    def wait_for_imu_data(self, timeout=1.0):
+    def wait_for_imu_data(self, timeout=30.0):
         if not self.data_event.wait(timeout):
             self.node.get_logger().error(
                 "\033[31mIMU data not received within the timeout period.\033[0m"

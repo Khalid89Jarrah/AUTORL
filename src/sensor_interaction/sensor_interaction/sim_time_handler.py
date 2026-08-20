@@ -28,7 +28,7 @@ class SimTimeHandler:
         self.clock_data = msg
         self.data_event.set()  # Set the event to signal that data is available
 
-    def wait_for_clock_data(self, timeout=1.0):
+    def wait_for_clock_data(self, timeout=30.0):
         if not self.data_event.wait(timeout):
             self.node.get_logger().error(
                 "IMU data not received within the timeout period."

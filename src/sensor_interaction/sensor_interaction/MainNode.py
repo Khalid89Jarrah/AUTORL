@@ -80,7 +80,7 @@ class MainNode(Node):
         """Reset the simulation using SimulationResetHandler."""
         # self.get_logger().info("Attempting to reset the simulation...")
         try:
-            success = self.sim_reset_handler.reset_simulation(timeout=10.2)
+            success = self.sim_reset_handler.reset_simulation(timeout=60)
         except TimeoutError as e:
             self.get_logger().error(f"Simulation reset timed out: {e}")
 
@@ -89,7 +89,7 @@ class MainNode(Node):
         # self.get_logger().info(f"Attempting to perform {steps} simulation step(s)...")
         try:
             success = self.sim_step_handler.perform_simulation_step(
-                steps=steps, timeout=10.2
+                steps=steps, timeout=60.0
             )
         except TimeoutError as e:
             self.get_logger().error(f"Simulation step timed out: {e}")
