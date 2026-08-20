@@ -30,7 +30,7 @@ from sensor_interaction.MainNode import MainNode
 # EVAL_INTERVAL_EPISODES * max_steps timesteps are collected between each
 # checkpoint + evaluation. With max_steps = 400 this is 400_000 timesteps,
 # identical to the previous behaviour.
-EVAL_INTERVAL_EPISODES = 1000
+EVAL_INTERVAL_EPISODES = 250
 
 # 0 = fresh start, or e.g. 400000 to continue from that timestep checkpoint.
 # NOTE: this is now counted in TIMESTEPS, not episodes.
