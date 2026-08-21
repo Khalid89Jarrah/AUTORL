@@ -58,14 +58,14 @@ class MainNode(Node):
         return super().destroy_node()
 
     def read_imu(self):
-        imu_data = self.imu_handler.wait_for_imu_data(10.2)
+        imu_data = self.imu_handler.wait_for_imu_data(30.0)
         return imu_data
 
     def get_sim_time(self):
         # self.get_logger().info("Attempting to get simulation time.")
         try:
             clock_data = self.sim_time_handler.wait_for_clock_data(
-                10.2
+                30.0
             )  # Wait for clock data
             sim_time_sec = clock_data.clock.sec
             sim_time_nanosec = clock_data.clock.nanosec

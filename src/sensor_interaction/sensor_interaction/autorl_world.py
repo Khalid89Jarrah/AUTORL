@@ -149,6 +149,8 @@ class Auto_RL(gym.Env):
 
             # Check truncation
             sim_time = self.main_node.get_sim_time()
+            if sim_time is None:
+                raise TimeoutError("Simulation clock unavailable")
             truncated = sim_time > 3.0
 
             # Construct observation
