@@ -21,25 +21,28 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.utils import set_random_seed
 
-from sensor_interaction.autorl_world import Auto_RL
+from sensor_interaction.autorl_world import Auto_RL, ABLATABLE_TERMS
 from sensor_interaction.MainNode import MainNode
 
 # ---------------------------------------------------------------------------
-# Campaign A configuration
+# Campaign A / B configuration
 # ---------------------------------------------------------------------------
 # EVAL_INTERVAL_EPISODES * max_steps timesteps are collected between each
-# checkpoint + evaluation. With max_steps = 400 this is 400_000 timesteps,
-# identical to the previous behaviour.
+# checkpoint + evaluation. With max_steps = 400 this is 100_000 timesteps.
 EVAL_INTERVAL_EPISODES = 250
 
 # 0 = fresh start, or e.g. 400000 to continue from that timestep checkpoint.
-# NOTE: this is now counted in TIMESTEPS, not episodes.
+# NOTE: this is counted in TIMESTEPS, not episodes.
 START_TRAINING_FROM = 0
 
 MODEL_BASENAME = "ppo_model_ref"
-MODEL_DIR = "/opt/autorl_ws/models"
-LOG_DIR = "./training_logs"
-TB_DIR = "./ppo_tensorboard"
+
+# Campaign B writes to a different directory than Campaign A so the two sets
+# of artefacts never mix. Override with AUTORL_MODEL_DIR / AUTORL_LOG_DIR /
+# AUTORL_TB_DIR (this is how runB.sbatch keeps each arm's outputs separate).
+MODEL_DIR = os.environ.get("AUTORL_MODEL_DIR", "/opt/autorl_ws/models")
+LOG_DIR = os.environ.get("AUTORL_LOG_DIR", "./training_logs")
+TB_DIR = os.environ.get("AUTORL_TB_DIR", "./ppo_tensorboard")
 
 # PPO hyperparameters (unchanged from the published configuration)
 GAMMA = 0.99
@@ -52,16 +55,20 @@ HORIZON = 2048
 # ---------------------------------------------------------------------------
 # Command line / environment configuration
 # ---------------------------------------------------------------------------
-def _take_int_flag(flag, env_var, default):
-    """Read an integer from `--flag N` (removing it from sys.argv so rclpy never
-    sees it), falling back to an environment variable, then to `default`."""
+def _take_flag(flag, env_var, default):
+    """Read a value from `--flag VALUE` (removing it from sys.argv so rclpy
+    never sees it), falling back to an environment variable, then `default`."""
     if flag in sys.argv:
         i = sys.argv.index(flag)
         if i + 1 < len(sys.argv):
-            value = int(sys.argv[i + 1])
+            value = sys.argv[i + 1]
             del sys.argv[i : i + 2]
             return value
-    return int(os.environ.get(env_var, default))
+    return os.environ.get(env_var, default)
+
+
+def _take_int_flag(flag, env_var, default):
+    return int(_take_flag(flag, env_var, str(default)))
 
 
 # Get the PIDs of Gazebo and ROS-related bridges
@@ -132,14 +139,14 @@ def _write_progress_csv(csv_path, history):
             writer.writerow(row)
 
 
-def _save_progress_plot(png_path, history):
+def _save_progress_plot(png_path, history, title_suffix=""):
     """Static learning-curve figure (no interactive display: headless run)."""
     if not history["timesteps"]:
         return
 
     fig, axs = plt.subplots(4, 1, figsize=(10, 12), sharex=True)
     series = [
-        (history["reward"], "Average Reward", "Training Progress - PPO"),
+        (history["reward"], "Average Reward", f"Training Progress - PPO{title_suffix}"),
         (history["action_magnitude"], "Mean Action Magnitude", "Action Magnitude"),
         (
             history["angular_velocity_error"],
@@ -166,6 +173,7 @@ def train_model(
     max_steps,
     seed,
     run_tag,
+    arm,
     gamma=GAMMA,
     learning_rate=LEARNING_RATE,
     batch_size=BATCH_SIZE,
@@ -175,9 +183,9 @@ def train_model(
     os.makedirs(MODEL_DIR, exist_ok=True)
     os.makedirs(LOG_DIR, exist_ok=True)
 
-    # FIX: this path was previously a plain string containing the literal text
-    # "{MODEL_BASENAME}", not an f-string, so the final model was written to a
-    # file actually named "{MODEL_BASENAME}.zip".
+    # FIX (Campaign A): this path was previously a plain string containing the
+    # literal text "{MODEL_BASENAME}", not an f-string, so the final model was
+    # written to a file actually named "{MODEL_BASENAME}.zip".
     model_save_path = f"{MODEL_DIR}/{run_tag}.zip"
     csv_path = f"{LOG_DIR}/{run_tag}_progress.csv"
     png_path = f"{LOG_DIR}/{run_tag}_progress.png"
@@ -191,12 +199,12 @@ def train_model(
             batch_size=batch_size,
             n_epochs=n_epochs,
             n_steps=horizon,
-            tensorboard_log=f"{TB_DIR}/seed_{seed}/",
+            tensorboard_log=f"{TB_DIR}/{arm}/seed_{seed}/",
             verbose=1,
             device="cpu",
             seed=seed,
         )
-        print(f"Starting PPO training from scratch (seed={seed}).")
+        print(f"Starting PPO training from scratch (arm={arm}, seed={seed}).")
     else:
         model_path = f"{MODEL_DIR}/{run_tag}_{START_TRAINING_FROM}.zip"
         print(f"Continuing training from checkpoint: {model_path}")
@@ -244,13 +252,14 @@ def train_model(
         model.logger.dump(step=absolute_timesteps)
 
         _write_progress_csv(csv_path, history)
-        _save_progress_plot(png_path, history)
+        _save_progress_plot(png_path, history, title_suffix=f"  [{arm}, seed {seed}]")
 
         model_filename = f"{MODEL_DIR}/{run_tag}_{absolute_timesteps}.zip"
         model.save(model_filename)
         print(
-            f"[seed {seed}] {absolute_timesteps}/{START_TRAINING_FROM + total_timesteps} "
-            f"timesteps - checkpoint saved: {model_filename}"
+            f"[{arm} seed {seed}] {absolute_timesteps}/"
+            f"{START_TRAINING_FROM + total_timesteps} timesteps - "
+            f"checkpoint saved: {model_filename}"
         )
 
     model.save(model_save_path)
@@ -310,23 +319,32 @@ def main(args=None):
     # Parsed and stripped from sys.argv before rclpy.init sees them.
     seed = _take_int_flag("--seed", "AUTORL_SEED", 0)
     total_timesteps = _take_int_flag("--timesteps", "AUTORL_TIMESTEPS", 0)
+    arm = _take_flag("--ablate", "AUTORL_ABLATE", "full").strip().lower()
 
     if total_timesteps <= 0:
         print(
             "ERROR: no training budget given.\n"
             "  Set it explicitly, e.g.\n"
             "    ros2 launch sensor_interaction node_launch.py algorithm:=ppo "
-            "gui:=false mode:=training seed:=0 timesteps:=2000000\n"
-            "  or export AUTORL_TIMESTEPS=2000000\n"
-            "  Choose the value from where rollout/ep_rew_mean plateaus in your "
-            "existing ppo_tensorboard logs."
+            "gui:=false mode:=training seed:=0 timesteps:=1200000 ablate:=full\n"
+            "  or export AUTORL_TIMESTEPS=1200000"
         )
         sys.exit(1)
 
-    run_tag = f"{MODEL_BASENAME}_seed{seed}"
+    if arm not in (["full", "none", ""] + ABLATABLE_TERMS):
+        print(
+            f"ERROR: unknown reward ablation '{arm}'.\n"
+            f"  Valid values: full, {', '.join(ABLATABLE_TERMS)}"
+        )
+        sys.exit(1)
+    if arm in ("none", ""):
+        arm = "full"
+
+    run_tag = f"{MODEL_BASENAME}_{arm}_seed{seed}"
 
     rclpy.init(args=args)
-    env = gym.make("Autopilot-RL-v0")
+    # Campaign B: `ablate` is forwarded through create_auto_rl_env to Auto_RL.
+    env = gym.make("Autopilot-RL-v0", ablate=arm)
     check_env(env)
 
     # Seed everything: python/numpy/torch via SB3, the env RNG that samples the
@@ -336,7 +354,9 @@ def main(args=None):
     env.action_space.seed(seed)
 
     logger = rclpy.logging.get_logger("my_logger")
-    logger.info(f"Starting PPO training (seed={seed}, timesteps={total_timesteps})")
+    logger.info(
+        f"Starting PPO training (arm={arm}, seed={seed}, timesteps={total_timesteps})"
+    )
     try:
         max_steps = env.spec.max_episode_steps
         start_time = time.time()  # Store start time
@@ -346,6 +366,7 @@ def main(args=None):
             max_steps=max_steps,
             seed=seed,
             run_tag=run_tag,
+            arm=arm,
         )
         end_time = time.time()  # Store end time
         print(

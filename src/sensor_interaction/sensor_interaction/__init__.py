@@ -5,7 +5,11 @@ from sensor_interaction.MainNode import MainNode
 
 def create_auto_rl_env(**kwargs):
     main_node = MainNode()
-    return Auto_RL(main_node=main_node)
+    # Campaign B: forward gym.make(...) keyword arguments (currently only
+    # `ablate`) to the environment. Previously kwargs were accepted and then
+    # silently discarded, so there was no way to configure the environment
+    # through gym.make.
+    return Auto_RL(main_node=main_node, **kwargs)
 
 
 # Register the custom environment

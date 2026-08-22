@@ -1,12 +1,64 @@
+import os
+
 import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 
 
+# ---------------------------------------------------------------------------
+# Campaign B: reward term weights
+# ---------------------------------------------------------------------------
+# These are EXACTLY the coefficients that were hard-coded in _compute_reward
+# before Campaign B (paper Section 3.5, Eqs. 7-14). They are collected here so
+# that a single term can be switched off for a leave-one-out ablation without
+# touching any other part of the reward, the observation, or the termination
+# logic.
+#
+# With ablate="full" (or None) the arithmetic is bit-for-bit identical to
+# Campaign A.
+REWARD_WEIGHTS = {
+    "error": -0.5,  # Eq. (7)   quadratic tracking error
+    "shaped": -0.1,  # Eq. (8)   linear tracking error
+    "oscillation": -1.0,  # Eq. (9)   second difference of angular velocity
+    "effort_smooth": -0.75,  # Eq. (11)  control-effort smoothness
+    "effort_energy": -0.40,  # Eq. (12)  control-effort magnitude
+    "disturbance": -0.02,  # Eq. (10)  IMU linear-acceleration magnitude
+    "overshoot": -2.0,  # Eq. (13)  signed overshoot past the setpoint
+    "band": +0.5,  # Eq. (14)  positive in-band bonus
+}
+
+# "error" is deliberately NOT ablatable: removing the primary tracking
+# objective leaves no task to learn, so the run would carry no information
+# about the remaining terms.
+ABLATABLE_TERMS = [k for k in REWARD_WEIGHTS if k != "error"]
+
+
 class Auto_RL(gym.Env):
-    def __init__(self, main_node, simulation_step_time=0.004):
+    def __init__(self, main_node, simulation_step_time=0.004, ablate=None):
         self.main_node = main_node
         self.simulation_step_time = simulation_step_time
+
+        # --- Campaign B: reward ablation -----------------------------------
+        # ablate is the name of the single reward term to disable, or one of
+        # None / "" / "none" / "full" for the unmodified composite reward.
+        if ablate is None:
+            ablate = os.environ.get("AUTORL_ABLATE", "full")
+        ablate = str(ablate).strip().lower()
+
+        self.reward_weights = dict(REWARD_WEIGHTS)
+        if ablate in ("", "none", "full"):
+            self.ablate = "full"
+        elif ablate in ABLATABLE_TERMS:
+            self.ablate = ablate
+            self.reward_weights[ablate] = 0.0
+        else:
+            raise ValueError(
+                f"Unknown reward ablation '{ablate}'. "
+                f"Valid values: full, {', '.join(ABLATABLE_TERMS)}"
+            )
+        print(f"[Auto_RL] reward arm = {self.ablate}")
+        print(f"[Auto_RL] reward weights = {self.reward_weights}")
+        # -------------------------------------------------------------------
 
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf, shape=(15,), dtype=np.float32
@@ -184,9 +236,14 @@ class Auto_RL(gym.Env):
         previous_angular_velocity_2,
         angular_velocity_setpoint,
     ):
+        # Campaign B: the numeric coefficients now come from self.reward_weights
+        # instead of being written inline. With ablate="full" every value is the
+        # one used in Campaign A, so the reward is unchanged.
+        w = self.reward_weights
+
         # --- Tracking error---
-        R_error = -0.5 * np.linalg.norm(angular_velocity_error) ** 2
-        R_shaped = -0.1 * np.linalg.norm(angular_velocity_error)
+        R_error = w["error"] * np.linalg.norm(angular_velocity_error) ** 2
+        R_shaped = w["shaped"] * np.linalg.norm(angular_velocity_error)
 
         # --- Oscillation penalty ---
         angular_accel = (
@@ -194,30 +251,30 @@ class Auto_RL(gym.Env):
             - 2 * previous_angular_velocity
             + previous_angular_velocity_2
         )
-        R_oscillation = -1.0 * np.linalg.norm(angular_accel) ** 2
+        R_oscillation = w["oscillation"] * np.linalg.norm(angular_accel) ** 2
 
         # --- Control effort smoothness ---
         delta_u = current_control_effort[:3] - previous_control_effort
-        R_effort_smooth = -0.75 * np.linalg.norm(delta_u) ** 2  # was -0.25
+        R_effort_smooth = w["effort_smooth"] * np.linalg.norm(delta_u) ** 2
 
         # --- Energy usage ---
         R_effort_energy = (
-            -0.40 * np.linalg.norm(current_control_effort[:3]) ** 2
-        )  # was -0.063
+            w["effort_energy"] * np.linalg.norm(current_control_effort[:3]) ** 2
+        )
 
         # --- Disturbance robustness ---
-        R_disturbance = -0.02 * np.linalg.norm(imu_acceleration)
+        R_disturbance = w["disturbance"] * np.linalg.norm(imu_acceleration)
 
         # --- Overshoot penalty ---
         sgn = np.sign(angular_velocity_setpoint)
         signed_error = sgn * (actual_angular_velocity - angular_velocity_setpoint)
         overshoot = np.clip(signed_error, 0.0, None)
-        R_overshoot = -2.0 * np.linalg.norm(overshoot) ** 2
+        R_overshoot = w["overshoot"] * np.linalg.norm(overshoot) ** 2
 
         # --- Tracking band reward ---
         error_norm = np.linalg.norm(angular_velocity_error)
         epsilon = 0.06
-        R_band = +0.5 * np.exp(-((error_norm / epsilon) ** 2))  # was +1.0
+        R_band = w["band"] * np.exp(-((error_norm / epsilon) ** 2))
 
         return (
             R_error

@@ -43,12 +43,21 @@ def generate_launch_description():
     declare_seed_argument = DeclareLaunchArgument(
         "seed",
         default_value="0",
-        description="Random seed for training (Campaign A: 0..4)",
+        description="Random seed for training (Campaign A: 0..4, Campaign B: 0..2)",
     )
     declare_timesteps_argument = DeclareLaunchArgument(
         "timesteps",
         default_value="0",
         description="Total training timesteps. Must be > 0; training aborts otherwise.",
+    )
+    declare_ablate_argument = DeclareLaunchArgument(
+        "ablate",
+        default_value="full",
+        description=(
+            "Campaign B reward ablation arm: full (no ablation), or one of "
+            "shaped, oscillation, effort_smooth, effort_energy, disturbance, "
+            "overshoot, band"
+        ),
     )
 
     # Choose GUI or No-GUI mode
@@ -84,6 +93,8 @@ def generate_launch_description():
             LaunchConfiguration("seed"),
             "--timesteps",
             LaunchConfiguration("timesteps"),
+            "--ablate",
+            LaunchConfiguration("ablate"),
         ],
         condition=IfCondition(
             PythonExpression(
@@ -188,6 +199,7 @@ def generate_launch_description():
             declare_mode_argument,
             declare_seed_argument,
             declare_timesteps_argument,
+            declare_ablate_argument,
             gz_sim,
             gz_sim_no_gui,
             bridge,
@@ -202,5 +214,6 @@ def generate_launch_description():
 ros2 launch sensor_interaction node_launch.py algorithm:=ppo gui:=false mode:=test_determinism
 ros2 launch sensor_interaction node_launch.py algorithm:=pid gui:=false mode:=evaluate
 ros2 launch sensor_interaction node_launch.py algorithm:=ppo gui:=false mode:=evaluate model_path:="/opt/autorl_ws/models/ppo_model.zip"
-ros2 launch sensor_interaction node_launch.py algorithm:=ppo gui:=false mode:=training seed:=0 timesteps:=2000000
+ros2 launch sensor_interaction node_launch.py algorithm:=ppo gui:=false mode:=training seed:=0 timesteps:=2000000 ablate:=full
+ros2 launch sensor_interaction node_launch.py algorithm:=ppo gui:=false mode:=training seed:=0 timesteps:=1200000 ablate:=oscillation
 """
