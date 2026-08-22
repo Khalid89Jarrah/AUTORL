@@ -35,7 +35,7 @@ def generate_launch_description():
     declare_algo_argument = DeclareLaunchArgument(
         "algorithm",
         default_value="ppo",
-        description="Choose the RL algorithm: ppo or pid",
+        description="Choose which node to launch: ppo or pid",
     )
     declare_mode_argument = DeclareLaunchArgument(
         "mode", default_value="training", description="Mode: training or evaluate"
@@ -43,12 +43,22 @@ def generate_launch_description():
     declare_seed_argument = DeclareLaunchArgument(
         "seed",
         default_value="0",
-        description="Random seed for training (Campaign A: 0..4)",
+        description="Random seed for training",
     )
     declare_timesteps_argument = DeclareLaunchArgument(
         "timesteps",
         default_value="0",
         description="Total training timesteps. Must be > 0; training aborts otherwise.",
+    )
+    declare_rl_algo_argument = DeclareLaunchArgument(
+        "rl_algo",
+        default_value="ppo",
+        description=(
+            "RL algorithm to train with: ppo (on-policy, the published "
+            "baseline) or td3 (off-policy). NOTE: this is separate from the "
+            "'algorithm' argument above, which selects which NODE to launch "
+            "(ppo_train.py vs evaluate_pid.py), not which algorithm trains."
+        ),
     )
 
     # Choose GUI or No-GUI mode
@@ -84,6 +94,8 @@ def generate_launch_description():
             LaunchConfiguration("seed"),
             "--timesteps",
             LaunchConfiguration("timesteps"),
+            "--algo",
+            LaunchConfiguration("rl_algo"),
         ],
         condition=IfCondition(
             PythonExpression(
@@ -101,7 +113,7 @@ def generate_launch_description():
     declare_model_path_argument = DeclareLaunchArgument(
         "model_path",
         default_value="/opt/autorl_ws/models/ppo_model.zip",
-        description="Path to PPO model",
+        description="Path to trained model",
     )
 
     ppo_evaluation_node = Node(
@@ -188,6 +200,7 @@ def generate_launch_description():
             declare_mode_argument,
             declare_seed_argument,
             declare_timesteps_argument,
+            declare_rl_algo_argument,
             gz_sim,
             gz_sim_no_gui,
             bridge,
@@ -202,5 +215,6 @@ def generate_launch_description():
 ros2 launch sensor_interaction node_launch.py algorithm:=ppo gui:=false mode:=test_determinism
 ros2 launch sensor_interaction node_launch.py algorithm:=pid gui:=false mode:=evaluate
 ros2 launch sensor_interaction node_launch.py algorithm:=ppo gui:=false mode:=evaluate model_path:="/opt/autorl_ws/models/ppo_model.zip"
-ros2 launch sensor_interaction node_launch.py algorithm:=ppo gui:=false mode:=training seed:=0 timesteps:=2000000
+ros2 launch sensor_interaction node_launch.py algorithm:=ppo gui:=false mode:=training seed:=0 timesteps:=2000000 rl_algo:=ppo
+ros2 launch sensor_interaction node_launch.py algorithm:=ppo gui:=false mode:=training seed:=0 timesteps:=2000000 rl_algo:=td3
 """
