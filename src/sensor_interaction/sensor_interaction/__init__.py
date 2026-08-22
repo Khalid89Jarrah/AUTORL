@@ -12,5 +12,5 @@ def create_auto_rl_env(**kwargs):
 register(
     id="Autopilot-RL-v0",
     entry_point="sensor_interaction:create_auto_rl_env",
-    max_episode_steps=400,
+    max_episode_steps=750,
 )
