@@ -4,7 +4,7 @@ from gymnasium import spaces
 
 
 class Auto_RL(gym.Env):
-    def __init__(self, main_node, simulation_step_time=0.01):
+    def __init__(self, main_node, simulation_step_time=0.004):
         self.main_node = main_node
         self.simulation_step_time = simulation_step_time
 

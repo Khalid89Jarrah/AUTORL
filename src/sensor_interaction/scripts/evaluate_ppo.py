@@ -121,7 +121,7 @@ def evaluate_ppo(
     model,
     eval_setpoints_frd,
     evaluation_time=30.0,
-    simulation_step_time=0.01,
+    simulation_step_time=0.004,
     settle_steps=3,
     csv_path="metrics_ppo.csv",
 ):

@@ -160,7 +160,7 @@ def evaluate_pid(
     pid,
     setpoints,
     evaluation_time=30.0,
-    simulation_step_time=0.01,
+    simulation_step_time=0.004,
     csv_path="metrics_pid.csv",
 ):
     time_steps = int(evaluation_time / simulation_step_time)
