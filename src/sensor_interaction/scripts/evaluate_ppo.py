@@ -63,6 +63,10 @@ class AxisMetrics:
     effort_L2: float
     sat_frac: float
     time_in_thresh_frac: float
+    # --- Campaign B: added for the reward-ablation study ---
+    # Judges the `oscillation` reward term (Eq. 9) on its own objective
+    # (shakiness) instead of on tracking error, which cannot see it.
+    osc_energy: float
 
 
 def _rise_time(t, y, y_ss, frac_low=0.1, frac_high=0.9):
@@ -96,6 +100,24 @@ def _settling_time(t, y, y_ss, eps=0.05, hold=0.5):
     return float("nan")
 
 
+def _osc_energy(y):
+    """Campaign B: mean squared discrete second difference of the tracked
+    signal, i.e. the exact same expression as the reward's oscillation
+    penalty (Eq. 9: ||omega_t - 2*omega_{t-1} + omega_{t-2}||^2), but
+    computed here as a held-out MEASUREMENT rather than a training penalty.
+
+    This is the metric that judges whether removing the `oscillation`
+    reward term (ablate="oscillation") actually makes the drone shakier,
+    independent of what happens to tracking error. Tracking error cannot
+    see this: a policy can chase the setpoint harder and record a LOWER
+    tracking error while oscillating MORE.
+    """
+    if len(y) < 3:
+        return float("nan")
+    second_diff = y[2:] - 2.0 * y[1:-1] + y[:-2]
+    return float(np.mean(second_diff**2))
+
+
 def compute_axis_metrics(t, y, sp, u, eps=0.05, hold=0.5):
     dt = float(np.mean(np.diff(t))) if len(t) > 1 else 0.01
     e = sp - y
@@ -113,6 +135,7 @@ def compute_axis_metrics(t, y, sp, u, eps=0.05, hold=0.5):
         float(np.sum(u**2) * dt),
         float(np.mean(np.isclose(np.abs(u), 1.0, atol=1e-6))) if len(u) else 0.0,
         float(np.mean(np.abs(e) <= eps)) if len(e) else 0.0,
+        _osc_energy(y),
     )
 
 
@@ -193,12 +216,14 @@ def evaluate_ppo(
                     "effort_L2": m.effort_L2,
                     "sat_frac": m.sat_frac,
                     "time_in_thresh_frac": m.time_in_thresh_frac,
+                    # Campaign B: judges the `oscillation` reward term (Eq. 9)
+                    "osc_energy": m.osc_energy,
                 }
             )
 
         df = pd.DataFrame(rows)
         all_rows.append(df)
-        print(df.to_string(index=False, float_format=lambda x: f"{x:,.4f}"))
+        print(df.to_string(index=False, float_format=lambda x: f"{x:,.6g}"))
 
         plot_payloads.append(
             (base_time.copy(), actual_hist.copy(), desired_hist.copy(), sp_frd.copy())
@@ -237,7 +262,12 @@ def evaluate_ppo(
         print("\n=== PPO Controller Average Performance Metrics ===")
         for col in numeric_cols:
             try:
-                print(f"{col:25s}: {averages[col]:.6f}")
+                # osc_energy is typically ~1e-5 to 1e-6: use scientific
+                # notation so it doesn't print as 0.000000 (handoff §7.3).
+                if col == "osc_energy":
+                    print(f"{col:25s}: {averages[col]:.6e}")
+                else:
+                    print(f"{col:25s}: {averages[col]:.6f}")
             except Exception:
                 pass
         print("=================================================\n")
