@@ -75,7 +75,7 @@ def plot_tracking(ax, t, actual, desired, sp):
     ax.legend()
 
 
-def plot_oscillations(ax, t, actual, sp):
+def plot_oscillations(ax, t, actual, sp, ylim=None):
     labels = ["Roll (X)", "Pitch (Y)", "Yaw (Z)"]
     for i in range(3):
         ax[i].plot(t, actual[:, i], label=f"Actual {labels[i]}")
@@ -84,6 +84,8 @@ def plot_oscillations(ax, t, actual, sp):
         ax[i].set_ylabel("Angular Velocity (rad/s)")
         ax[i].grid()
         ax[i].legend()
+        if ylim is not None:
+            ax[i].set_ylim(*ylim)
 
 
 @dataclass
@@ -304,7 +306,7 @@ def evaluate_pid(
             )
             ax.set_ylim(y_min, y_max)
             plot_oscillations(
-                ax_osc[idx], t_hist[:n_points], actual_hist[:n_points], sp_frd
+                ax_osc[idx], t_hist[:n_points], actual_hist[:n_points], sp_frd, ylim=(y_min, y_max)
             )
 
         plt.tight_layout()

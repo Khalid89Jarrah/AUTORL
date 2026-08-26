@@ -37,7 +37,7 @@ def plot_tracking(ax, time, actual_frd, desired_frd, eval_setpoint_frd):
     ax.legend()
 
 
-def plot_oscillations(ax, time, actual_frd, eval_setpoint_frd):
+def plot_oscillations(ax, time, actual_frd, eval_setpoint_frd, ylim=None):
     labels = ["Roll (X)", "Pitch (Y)", "Yaw (Z)"]
     for i in range(3):
         ax[i].plot(time, actual_frd[:, i], label=f"Actual {labels[i]}")
@@ -48,6 +48,8 @@ def plot_oscillations(ax, time, actual_frd, eval_setpoint_frd):
         ax[i].set_ylabel("Angular Velocity (rad/s)")
         ax[i].grid(True)
         ax[i].legend()
+        if ylim is not None:
+            ax[i].set_ylim(*ylim)
 
 
 @dataclass
@@ -273,7 +275,7 @@ def evaluate_ppo(
 
         for idx, (t_base, actual_hist, _, sp_frd) in enumerate(plot_payloads):
             plot_oscillations(
-                ax_osc[idx], t_base[: len(actual_hist)], actual_hist, sp_frd
+                ax_osc[idx], t_base[: len(actual_hist)], actual_hist, sp_frd, ylim=(y_min, y_max)
             )
 
         plt.tight_layout()

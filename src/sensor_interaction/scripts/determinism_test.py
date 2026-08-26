@@ -68,8 +68,8 @@ def test_environment_determinism(env, eval_setpoints_frd, steps=100):
         max_rew_diff = reward_diff.max()
 
         # Binary equality checks
-        same_states = np.allclose(s1, s2, atol=1e-8)
-        same_rewards = np.allclose(r1, r2, atol=1e-8)
+        same_states = np.array_equal(s1, s2)
+        same_rewards = np.array_equal(r1, r2)
 
         print(f"--- Determinism Diagnostics ---")
         print(f"Steps compared : {n}, Rewards compared: {m}")
