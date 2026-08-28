@@ -202,8 +202,7 @@ def run_case(env, controller, kind, sp_frd, cfg):
         else:
             meas_frd = flu_to_frd(obs[3:6])
             err_frd = sp_frd - meas_frd
-            action = controller["pid"](err_frd, meas_frd, cfg["dt"])
-            action = frd_to_flu(action)
+            action, _ = controller["pid"](err_frd, meas_frd, cfg["dt"])
 
         obs_next, _, terminated, truncated, _ = env.step(action)
         meas_frd = flu_to_frd(obs_next[3:6])
@@ -256,6 +255,7 @@ def main(args=None):
     gust_steps = _take_flag("--gust-steps", 25, int)
     out_csv = _take_flag("--out", f"metrics_disturbance_{which}.csv", str)
     model_path_cli = _take_flag("--model", "", str)
+    wrench_topic_cli = _take_flag("--wrench-topic", "", str)
 
     cases = ["none", "wind", "gust"] if case == "all" else [case]
 
@@ -289,7 +289,7 @@ def main(args=None):
         "topic": None,
     }
     if any(c in ("wind", "gust") for c in cases):
-        cfg["topic"] = find_wrench_topic()
+        cfg["topic"] = wrench_topic_cli or find_wrench_topic()
         print(f"[disturbance] wrench topic: {cfg['topic']}")
 
     setpoints = [
