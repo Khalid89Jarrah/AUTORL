@@ -13,6 +13,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 import numpy as np
+import torch.nn as nn
 import psutil
 import rclpy
 import gymnasium as gym
@@ -102,6 +103,9 @@ TD3_KWARGS = dict(
     target_noise_clip=0.3,  # was SB3 default 0.5 (unset previously)
 )
 
+# Applied to the TD3 actor optimizer only (see build_model).
+ACTOR_WEIGHT_DECAY = 1e-2
+
 ALGOS = ("ppo", "td3")
 
 
@@ -130,12 +134,27 @@ def build_model(algo, env, seed, tb_path):
         action_noise = NormalActionNoise(
             mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions)
         )
-        return TD3(
+        model = TD3(
             **common,
-            policy_kwargs=dict(net_arch=NET_ARCH),
+            policy_kwargs=dict(net_arch=NET_ARCH, activation_fn=nn.Tanh),
             action_noise=action_noise,
             **TD3_KWARGS,
         )
+        # ROOT CAUSE FIX. The actor's final linear layer weight norm grew to
+        # 24.56 (PPO's equivalent: 0.70), driving pre-tanh activations to
+        # 8-28 for every observation in the operating range. tanh saturates
+        # there, so the actor emitted a constant [1,-1,1] regardless of input
+        # and its gradient vanished. Verified by feeding 4 distinct
+        # observations to the 937500-step checkpoint: identical output each
+        # time. Weight decay is applied to the ACTOR optimizer only - the
+        # critic was healthy (its loss converged 4395 -> 32) and must not be
+        # regularized. SB3 applies policy_kwargs["optimizer_kwargs"] to BOTH
+        # optimizers (td3/policies.py lines 183 and 203), which is why it is
+        # set here instead.
+        for g in model.actor.optimizer.param_groups:
+            g["weight_decay"] = ACTOR_WEIGHT_DECAY
+        print(f"[TD3] actor weight_decay={ACTOR_WEIGHT_DECAY}, critic weight_decay=0")
+        return model
 
     raise ValueError(f"Unknown algorithm '{algo}'")
 
@@ -343,7 +362,7 @@ def train_model(env, total_timesteps, max_steps, seed, run_tag, algo):
         # well past 1.0 late in training is the exact signature of the
         # collapse seen in the first TD3 attempt. This does not stop
         # training - it is a visible early-warning print only.
-        if algo == "td3" and avg_action_magnitude > 0.9:
+        if algo == "td3" and avg_action_magnitude > 1.5:
             print(
                 f"[{algo} seed {seed}] WARNING: avg action magnitude "
                 f"{avg_action_magnitude:.3f} is approaching/past the [-1,1] "
