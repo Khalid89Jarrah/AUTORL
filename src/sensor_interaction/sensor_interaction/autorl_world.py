@@ -33,6 +33,13 @@ class Auto_RL(gym.Env):
 
         self.main_node.reset_simulation()
 
+        # Discard any IMU message published before the reset completed.
+        # threading.Event stays set until cleared, so without this the first
+        # read after reset can return a stale pre-reset measurement
+        # (failure mode 1, "stale observation").
+        self.main_node.imu_handler.data_event.clear()
+        self.main_node.imu_handler.imu_data = None
+
         self.stable_duration = 0.0  # Reset stable duration tracker
 
         # Initialize observation components

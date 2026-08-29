@@ -94,7 +94,12 @@ class CpuLoad:
 
 def run_rollout(env, model, sp_flu, steps, seed):
     """One policy-driven rollout from a seeded reset."""
-    obs, _ = env.reset(seed=seed, options={"eval_setpoint": sp_flu})
+    for _ in range(10):
+        obs, _ = env.reset(seed=seed, options={"eval_setpoint": sp_flu})
+        st = env.main_node.get_sim_time()
+        if st is not None and st < 2.0:
+            break
+        print(f"[retry] discarding rollout, simtime={st}", flush=True)
     print(f"[reset] simtime={env.main_node.get_sim_time()} obs0={np.array2string(obs[:9], precision=9)}", flush=True)
     obs_log = [obs.copy()]
     rew_log = []
