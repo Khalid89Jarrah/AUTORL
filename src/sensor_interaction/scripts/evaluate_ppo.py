@@ -281,7 +281,15 @@ def build_setpoints(n):
 # ---------------------------------------------------------------------------
 # Rollout: one clean episode per setpoint, no mid-episode resets
 # ---------------------------------------------------------------------------
-def run_episode(env, sp_frd, dt, controller, model=None, pid=None, max_steps=100000):
+def run_episode(env, sp_frd, dt, controller, model=None, pid=None, max_steps=None):
+    # Episode length is bounded by OUR OWN step budget, not by the env's
+    # `truncated` flag. autorl_world.py computes `truncated = sim_time > 3.0`
+    # from Gazebo's ABSOLUTE clock, and WorldReset does not rewind that clock.
+    # So only the first episode of a run truncates correctly; every later one
+    # reports truncated=True on step 1 and yields a single sample. Verified:
+    # setpoint 0 -> 726 steps (2.90 s), setpoint 1 -> 1 sample.
+    if max_steps is None:
+        max_steps = int(round(3.0 / dt))
     sp_flu = frd_to_flu(sp_frd)
     obs, _ = env.reset(options={"eval_setpoint": sp_flu})
     if controller == "pid":
@@ -313,9 +321,7 @@ def run_episode(env, sp_frd, dt, controller, model=None, pid=None, max_steps=100
         if terminated:
             end_reason = "terminated"
             break
-        if truncated:
-            end_reason = "truncated"
-            break
+        # `truncated` deliberately ignored - see note at top of this function.
 
     return (
         np.asarray(t_hist, dtype=np.float64),
