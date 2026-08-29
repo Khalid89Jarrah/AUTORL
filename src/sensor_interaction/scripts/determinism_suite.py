@@ -73,9 +73,9 @@ class CpuLoad:
 
     def __enter__(self):
         if self.workers > 0:
-            self.stop_flag = mp.Value("b", False)
+            self.stop_flag = mp.get_context("spawn").Value("b", False)
             for _ in range(self.workers):
-                p = mp.Process(target=_burn, args=(self.stop_flag,), daemon=True)
+                p = mp.get_context("spawn").Process(target=_burn, args=(self.stop_flag,), daemon=True)
                 p.start()
                 self.procs.append(p)
             print(f"[load] {self.workers} background CPU workers started")
@@ -95,6 +95,7 @@ class CpuLoad:
 def run_rollout(env, model, sp_flu, steps, seed):
     """One policy-driven rollout from a seeded reset."""
     obs, _ = env.reset(seed=seed, options={"eval_setpoint": sp_flu})
+    print(f"[reset] simtime={env.main_node.get_sim_time()} obs0={np.array2string(obs[:9], precision=9)}", flush=True)
     obs_log = [obs.copy()]
     rew_log = []
     act_log = []
@@ -157,6 +158,10 @@ def main(args=None):
         np.array([-0.3, -0.1, 0.2], dtype=np.float32),
     ]
 
+    for _ in range(4):  # warm-up rollouts, discarded: settle the sim clock
+        run_rollout(base, model, frd_to_flu(setpoints_frd[0]), steps, seed)
+
+
     summary = []
     try:
         with CpuLoad(cpu_load):
@@ -176,7 +181,7 @@ def main(args=None):
                     d_state = np.abs(s1c - s2c)
                     d_rew = np.abs(r1c - r2c)
 
-                    tag = f"sp{sp_idx}_pair{pair:03d}_{machine}_noise-{noise_tag}"
+                    tag = f"sp{sp_idx}_pair{pair:03d}_{machine}_noise-{noise_tag}_load{cpu_load}"
                     np.savez(
                         os.path.join(out_dir, f"{tag}.npz"),
                         obs_a=s1c,
@@ -215,7 +220,7 @@ def main(args=None):
                     )
 
         summary_path = os.path.join(
-            out_dir, f"determinism_summary_{machine}_noise-{noise_tag}.json"
+            out_dir, f"determinism_summary_{machine}_noise-{noise_tag}_load{cpu_load}.json"
         )
         with open(summary_path, "w") as f:
             json.dump(summary, f, indent=2)
