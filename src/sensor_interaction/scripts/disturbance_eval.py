@@ -109,24 +109,48 @@ def find_wrench_topic():
         )
     # Prefer the non-persistent, non-clear endpoint for one-shot application.
     for t in candidates:
-        if not t.endswith("/persistent") and not t.endswith("/clear"):
+        if t.endswith("/persistent"):
+            return t
+    for t in candidates:
+        if not t.endswith("/clear"):
             return t
     return candidates[0]
 
 
+FORCE_OFFSET = (0.0, 0.0, 0.0)
+
+
 def apply_force(topic, force_xyz, entity_name="x500", link_name="base_link"):
-    """Publish one EntityWrench. Applied for a single physics iteration."""
+    """Publish one EntityWrench on the persistent endpoint.
+
+    FORCE_OFFSET is in the link frame relative to the link origin. base_link's
+    CoM sits at the origin, so a zero offset gives a pure translational force
+    and no moment -- which is why the rate loop cannot see it. A non-zero
+    offset produces tau = offset x F about the CoM.
+    """
     fx, fy, fz = (float(v) for v in force_xyz)
+    ox, oy, oz = (float(v) for v in FORCE_OFFSET)
     msg = (
         f'entity: {{name: "{entity_name}", type: MODEL}}, '
         f"wrench: {{force: {{x: {fx}, y: {fy}, z: {fz}}}, "
-        f"torque: {{x: 0, y: 0, z: 0}}}}"
+        f"torque: {{x: 0, y: 0, z: 0}}, "
+        f"force_offset: {{x: {ox}, y: {oy}, z: {oz}}}}}"
     )
     subprocess.run(
         ["gz", "topic", "-t", topic, "-m", "gz.msgs.EntityWrench", "-p", msg],
         capture_output=True,
         text=True,
         timeout=10,
+    )
+
+
+def clear_force(topic):
+    """Clear all persistent wrenches."""
+    base = topic[: -len("/persistent")] if topic.endswith("/persistent") else topic
+    subprocess.run(
+        ["gz", "topic", "-t", base + "/clear", "-m", "gz.msgs.Entity",
+         "-p", 'name: "x500", type: MODEL'],
+        capture_output=True, text=True, timeout=10,
     )
 
 
@@ -184,30 +208,50 @@ def run_case(env, controller, kind, sp_frd, cfg):
     obs, _ = env.reset(options={"eval_setpoint": sp_flu})
 
     if controller["type"] == "pid":
-        controller["pid"].reset()
+        controller["pid"].reset(measurement=flu_to_frd(obs[3:6]))
 
     n_steps = int(cfg["eval_time"] / cfg["dt"])
     t_hist, actual_hist, desired_hist, action_hist = [], [], [], []
+    # Episode index per recorded step. A 30 s case contains ~10 separate step
+    # responses; without this the metrics are computed over all of them
+    # concatenated, so rise/settling describe only the first episode and
+    # overshoot is the worst single value across all of them.
+    ep_hist, ep = [], 0
 
+    if kind == "wind":
+        clear_force(cfg["topic"])
+        apply_force(cfg["topic"], cfg["wind_force"])
+    elif kind == "gust":
+        clear_force(cfg["topic"])
+
+    gust_on = False
     for step in range(n_steps):
-        if kind == "wind":
-            apply_force(cfg["topic"], cfg["wind_force"])
-        elif kind == "gust":
+        if kind == "gust":
             phase = step % cfg["gust_every"]
-            if phase < cfg["gust_steps"]:
+            want = phase < cfg["gust_steps"]
+            if want and not gust_on:
                 apply_force(cfg["topic"], cfg["gust_force"])
+                gust_on = True
+            elif not want and gust_on:
+                clear_force(cfg["topic"])
+                gust_on = False
 
         if controller["type"] == "ppo":
             action, _ = controller["model"].predict(obs, deterministic=True)
         else:
             meas_frd = flu_to_frd(obs[3:6])
             err_frd = sp_frd - meas_frd
-            action = controller["pid"](err_frd, meas_frd, cfg["dt"])
-            action = frd_to_flu(action)
+            u_sat, _ = controller["pid"](err_frd, meas_frd, cfg["dt"])
+            # evaluate_pid.py passes u_sat straight to env.step with no frame
+            # conversion. frd_to_flu negates y and z, which inverts pitch and
+            # yaw feedback; the published gains are tuned against the
+            # unconverted path, so match it exactly.
+            action = u_sat
 
         obs_next, _, terminated, truncated, _ = env.step(action)
         meas_frd = flu_to_frd(obs_next[3:6])
 
+        ep_hist.append(ep)
         t_hist.append(step * cfg["dt"])
         desired_hist.append(sp_frd.copy())
         actual_hist.append(meas_frd.copy())
@@ -217,13 +261,25 @@ def run_case(env, controller, kind, sp_frd, cfg):
         if terminated or truncated:
             obs, _ = env.reset(options={"eval_setpoint": sp_flu})
             if controller["type"] == "pid":
-                controller["pid"].reset()
+                controller["pid"].reset(measurement=flu_to_frd(obs[3:6]))
+            # The world reset may drop the persistent wrench. Re-arm it.
+            if kind == "wind":
+                clear_force(cfg["topic"])
+                apply_force(cfg["topic"], cfg["wind_force"])
+            elif kind == "gust":
+                clear_force(cfg["topic"])
+                gust_on = False
+            ep += 1
+
+    if kind in ("wind", "gust"):
+        clear_force(cfg["topic"])
 
     return (
         np.array(t_hist),
         np.array(actual_hist),
         np.array(desired_hist),
         np.array(action_hist),
+        np.array(ep_hist),
     )
 
 
@@ -251,6 +307,9 @@ def main(args=None):
     dt = _take_flag("--dt", 0.004, float)
     eval_time = _take_flag("--eval-time", 30.0, float)
     force = _take_flag("--force", 2.0, float)
+    offset_z = _take_flag("--offset-z", 0.0, float)
+    globals()["FORCE_OFFSET"] = (0.0, 0.0, float(offset_z))
+    print(f"[disturbance] force_offset (link frame): {FORCE_OFFSET}")
     gust_force = _take_flag("--gust-force", 8.0, float)
     gust_every = _take_flag("--gust-every", 250, int)
     gust_steps = _take_flag("--gust-steps", 25, int)
@@ -261,7 +320,8 @@ def main(args=None):
 
     rclpy.init(args=args)
     env = gym.make("Autopilot-RL-v0")
-    base = env.unwrapped
+    base = env  # was env.unwrapped -- the 400-step TimeLimit is part of the
+                # published evaluation protocol; removing it changes the result
 
     controller = {"type": which}
     if which == "ppo":
@@ -277,7 +337,15 @@ def main(args=None):
             raise RuntimeError("ERROR: pass model_path:= or --model for PPO")
         controller["model"] = PPO.load(model_path, device="cpu")
     else:
-        controller["pid"] = PIDRateController()
+        # Gains MUST match evaluate_pid.main() -- this is the paper's baseline.
+        controller["pid"] = PIDRateController(
+            kp=(0.11, 0.14, 0.30),
+            ki=(0.18, 0.12, 0.15),
+            kd=(0.015, 0.006, 0.00),
+            u_min=-1.0,
+            u_max=1.0,
+            integ_limit=(0.5, 0.4, 0.35),
+        )
 
     cfg = {
         "dt": dt,
@@ -304,9 +372,34 @@ def main(args=None):
         for kind in cases:
             for i, sp in enumerate(setpoints, start=1):
                 print(f"\n=== {which.upper()} | case={kind} | setpoint {i} {sp} ===")
-                t, act, des, u = run_case(base, controller, kind, sp, cfg)
+                t, act, des, u, ep = run_case(base, controller, kind, sp, cfg)
+                np.savez(
+                    f"{os.path.splitext(out_csv)[0]}_raw_{kind}_sp{i}.npz",
+                    t=t, actual=act, desired=des, action=u, episode=ep,
+                    setpoint=sp, case=kind, controller=which,
+                )
+                eps = [e for e in np.unique(ep) if (ep == e).sum() >= 25]
+                print(f"    episodes: {len(np.unique(ep))} total, "
+                      f"{len(eps)} with >=25 steps")
                 for ax in range(3):
-                    m = compute_axis_metrics(t, act[:, ax], sp[ax], u[:, ax])
+                    # Per-episode metrics, then averaged. Each episode's time
+                    # axis is re-zeroed so rise/settling/ITAE are measured from
+                    # that episode's own start.
+                    per = []
+                    for e in eps:
+                        sel = ep == e
+                        te = t[sel] - t[sel][0]
+                        per.append(compute_axis_metrics(
+                            te, act[sel, ax], sp[ax], u[sel, ax]))
+                    if not per:
+                        continue
+                    fields = ["rise_time", "overshoot_pct", "settling_time",
+                              "ss_error_abs", "IAE", "ISE", "ITAE", "effort_L1",
+                              "effort_L2", "sat_frac", "time_in_thresh_frac"]
+                    avg = {f: float(np.nanmean([getattr(p, f) for p in per]))
+                           for f in fields}
+                    m = type("M", (), avg)()
+                    m.n_episodes = len(per)
                     rows.append(
                         {
                             "controller": which,
