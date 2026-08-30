@@ -50,6 +50,11 @@ def generate_launch_description():
         default_value="0",
         description="Total training timesteps. Must be > 0; training aborts otherwise.",
     )
+    declare_world_argument = DeclareLaunchArgument(
+        "world",
+        default_value="autorl_drone.sdf",
+        description="World file: autorl_drone.sdf (calm) or autorl_drone_wind.sdf (5 m/s wind)",
+    )
     declare_ablate_argument = DeclareLaunchArgument(
         "ablate",
         default_value="full",
@@ -65,7 +70,7 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(
             os.path.join(pkg_ros_gz_sim, "launch", "gz_sim.launch.py")
         ),
-        launch_arguments={"gz_args": "autorl_drone.sdf"}.items(),
+        launch_arguments={"gz_args": LaunchConfiguration("world")}.items(),
         condition=IfCondition(
             PythonExpression(["'", LaunchConfiguration("gui"), "' == 'true'"])
         ),
@@ -75,7 +80,7 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(
             os.path.join(pkg_ros_gz_sim, "launch", "gz_server.launch.py")
         ),
-        launch_arguments={"world_sdf_file": "autorl_drone.sdf"}.items(),
+        launch_arguments={"world_sdf_file": LaunchConfiguration("world")}.items(),
         condition=IfCondition(
             PythonExpression(["'", LaunchConfiguration("gui"), "' == 'false'"])
         ),
@@ -200,6 +205,7 @@ def generate_launch_description():
             declare_seed_argument,
             declare_timesteps_argument,
             declare_ablate_argument,
+            declare_world_argument,
             gz_sim,
             gz_sim_no_gui,
             bridge,

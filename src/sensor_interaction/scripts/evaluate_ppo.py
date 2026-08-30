@@ -162,6 +162,7 @@ def evaluate_ppo(
             obs, _, _, _, _ = env.step(np.zeros(3, dtype=np.float32))
 
         t_hist, desired_hist, actual_hist, action_hist = [], [], [], []
+        accel_hist = []
         print(
             f"\n=== PPO Setpoint {i+1}: FRD={sp_frd.tolist()} | FLU={sp_flu.tolist()} ==="
         )
@@ -176,6 +177,7 @@ def evaluate_ppo(
             desired_hist.append(sp_frd.copy())
             actual_hist.append(meas_frd.copy())
             action_hist.append(np.asarray(action, dtype=np.float32).copy())
+            accel_hist.append(np.asarray(obs_next[6:9], dtype=np.float32).copy())
 
             obs = obs_next
             step += 1
@@ -192,6 +194,16 @@ def evaluate_ppo(
         desired_hist = np.array(desired_hist)
         actual_hist = np.array(actual_hist)
         action_hist = np.array(action_hist)
+        accel_hist = np.array(accel_hist)
+        mean_accel_norm = float(np.mean(np.linalg.norm(accel_hist, axis=1))) if len(accel_hist) else float("nan")
+        accel_dev = float(np.mean(np.abs(np.linalg.norm(accel_hist, axis=1) - 9.8))) if len(accel_hist) else float("nan")
+        accel_std = float(np.std(np.linalg.norm(accel_hist, axis=1))) if len(accel_hist) else float("nan")
+        accel_xy = float(np.mean(np.linalg.norm(accel_hist[:, :2], axis=1))) if len(accel_hist) else float("nan")
+        _an = np.linalg.norm(accel_hist, axis=1) if len(accel_hist) else np.array([])
+        _un = np.linalg.norm(action_hist, axis=1) if len(action_hist) else np.array([])
+        _n = min(len(_an), len(_un))
+        accel_effort_corr = float(np.corrcoef(_an[:_n], _un[:_n])[0, 1]) if _n > 2 and np.std(_an[:_n]) > 0 and np.std(_un[:_n]) > 0 else float("nan")
+        accel_range = float(np.max(_an) - np.min(_an)) if len(_an) else float("nan")
 
         rows = []
         for ax in range(3):
@@ -218,6 +230,12 @@ def evaluate_ppo(
                     "time_in_thresh_frac": m.time_in_thresh_frac,
                     # Campaign B: judges the `oscillation` reward term (Eq. 9)
                     "osc_energy": m.osc_energy,
+                    "mean_accel_norm": mean_accel_norm,
+                    "accel_dev_from_g": accel_dev,
+                    "accel_std": accel_std,
+                    "accel_xy": accel_xy,
+                    "accel_effort_corr": accel_effort_corr,
+                    "accel_range": accel_range,
                 }
             )
 
