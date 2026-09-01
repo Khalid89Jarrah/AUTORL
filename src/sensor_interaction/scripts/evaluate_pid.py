@@ -283,6 +283,12 @@ def evaluate_pid(
         y_min -= margin
         y_max += margin
 
+        osc_all_vals = np.hstack([actual_hist for (_, actual_hist, _, _) in plot_payloads])
+        osc_y_min, osc_y_max = -0.7, 0.7
+        osc_margin = 0.05 * (osc_y_max - osc_y_min)
+        osc_y_min -= osc_margin
+        osc_y_max += osc_margin
+
         n = len(plot_payloads)
         fig_tr, ax_tr = plt.subplots(2, 2, figsize=(14, 10))
         ax_tr = ax_tr.flatten()
@@ -306,6 +312,8 @@ def evaluate_pid(
             plot_oscillations(
                 ax_osc[idx], t_hist[:n_points], actual_hist[:n_points], sp_frd
             )
+            for a in ax_osc[idx]:
+                a.set_ylim(osc_y_min, osc_y_max)
 
         plt.tight_layout()
         track_path = os.path.abspath("pid_tracking.png")

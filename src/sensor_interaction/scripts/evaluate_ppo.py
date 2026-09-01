@@ -266,6 +266,12 @@ def evaluate_ppo(
         fig_tr.savefig(tracking_path, dpi=150)
 
         # Oscillations plots
+        osc_all_vals = np.hstack([actual_hist for (_, actual_hist, _, _) in plot_payloads])
+        osc_y_min, osc_y_max = -0.7, 0.7
+        osc_margin = 0.05 * (osc_y_max - osc_y_min)
+        osc_y_min -= osc_margin
+        osc_y_max += osc_margin
+
         n = len(plot_payloads)
         fig_osc, ax_osc = plt.subplots(n, 3, figsize=(15, 3 * n))
         if n == 1:
@@ -275,6 +281,8 @@ def evaluate_ppo(
             plot_oscillations(
                 ax_osc[idx], t_base[: len(actual_hist)], actual_hist, sp_frd
             )
+            for a in ax_osc[idx]:
+                a.set_ylim(osc_y_min, osc_y_max)
 
         plt.tight_layout()
         osc_path = os.path.abspath("ppo_oscillations.png")
