@@ -14,6 +14,9 @@ class SimulationStepHandler:
 
     def perform_simulation_step(self, steps=1, timeout=5.0):
         """Perform a simulation step and wait for the response."""
+        self.response_event.clear()
+        self.response = None
+
         # Prepare the request
         request = ControlWorld.Request()
         world_reset = WorldReset()

@@ -4,7 +4,7 @@ from gymnasium import spaces
 
 
 class Auto_RL(gym.Env):
-    def __init__(self, main_node, simulation_step_time=0.01):
+    def __init__(self, main_node, simulation_step_time=0.004):
         self.main_node = main_node
         self.simulation_step_time = simulation_step_time
 
@@ -52,7 +52,7 @@ class Auto_RL(gym.Env):
         if eval_setpoint is not None:
             self.angular_velocity_sp = eval_setpoint
         else:
-            self.angular_velocity_sp = np.random.normal(
+            self.angular_velocity_sp = self.np_random.normal(
                 loc=0.0, scale=0.3, size=3
             ).astype(np.float32)
 
@@ -146,6 +146,8 @@ class Auto_RL(gym.Env):
 
             # Check truncation
             sim_time = self.main_node.get_sim_time()
+            if sim_time is None:
+                raise TimeoutError("Simulation clock unavailable")
             truncated = sim_time > 3.0
 
             # Construct observation
