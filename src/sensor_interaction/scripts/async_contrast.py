@@ -140,13 +140,32 @@ def run_blocking(env, steps, dt):
     rotors = hover_rotor_speeds(env)
 
     stamps = []
+    ids = []
+    t_pub = []
+    t_step = []
+    t_imu = []
     for _ in range(steps):
+        a = time.perf_counter()
         main_node.publish_motor_commands(rotors)
+        b = time.perf_counter()
         main_node.perform_simulation_step(1)
+        c = time.perf_counter()
         imu = main_node.read_imu()
+        d = time.perf_counter()
         stamps.append(stamp_seconds(imu))
+        ids.append(id(imu))
+        t_pub.append(b - a)
+        t_step.append(c - b)
+        t_imu.append(d - c)
 
-    return np.diff(np.array(stamps))
+    return (
+        np.diff(np.array(stamps)),
+        np.array(t_pub[1:]),
+        np.array(t_step[1:]),
+        np.array(t_imu[1:]),
+        np.array(stamps),
+        np.array(ids, dtype=np.int64),
+    )
 
 
 def run_async(env, steps, dt, rate_hz):
@@ -160,7 +179,24 @@ def run_async(env, steps, dt, rate_hz):
     rotors = hover_rotor_speeds(env)
 
     set_world_running(main_node, True)
-    time.sleep(0.5)  # let the world start advancing before sampling
+    # set_world_running only waits for the service future, not for the world to
+    # actually resume. Confirm the clock is moving before sampling, otherwise
+    # every read returns the same latched message and every delta is zero.
+    started = False
+    prev = None
+    for _ in range(100):
+        time.sleep(0.05)
+        msg = main_node.imu_handler.imu_data
+        cur = stamp_seconds(msg) if msg is not None else None
+        if cur is not None and prev is not None and cur != prev:
+            started = True
+            break
+        prev = cur
+    if not started:
+        raise RuntimeError(
+            "async mode: world did not resume - IMU stamp never advanced"
+        )
+    print(f"[async] world running, stamp advancing at {prev}")
 
     period = 1.0 / rate_hz if rate_hz > 0 else 0.0
     stamps = []
@@ -186,7 +222,7 @@ def run_async(env, steps, dt, rate_hz):
     return np.diff(np.array(stamps))
 
 
-def report(name, deltas, dt, out_dir):
+def report(name, deltas, dt, out_dir, timings=None, extra=None):
     if len(deltas) == 0:
         print(f"[{name}] no samples collected")
         return None
@@ -207,12 +243,12 @@ def report(name, deltas, dt, out_dir):
     if counts["multi_step_histogram"]:
         print(f"multi-step histogram          : {counts['multi_step_histogram']}")
 
-    np.savez(
-        os.path.join(out_dir, f"async_contrast_{name}.npz"),
-        stamp_deltas=deltas,
-        ticks=ticks,
-        dt=dt,
-    )
+    kw = dict(stamp_deltas=deltas, ticks=ticks, dt=dt)
+    if timings is not None:
+        kw["t_pub"], kw["t_step"], kw["t_imu"] = timings
+    if extra is not None:
+        kw.update(extra)
+    np.savez(os.path.join(out_dir, f"async_contrast_{name}.npz"), **kw)
     return counts
 
 
@@ -231,6 +267,23 @@ def main(args=None):
 
     results = []
     try:
+        # ros_gz_sim's GzServer action exposes only world_sdf_file/string,
+        # initial_sim_time and verbosity_level -- there is no pause option, so
+        # the server free-runs from launch. Stop it here and wait until the IMU
+        # stamp stops advancing, so the first measured delta starts from a
+        # stopped world. Uses the latched message, not read_imu(), because a
+        # paused world publishes nothing and read_imu() would block.
+        set_world_running(base.main_node, False)
+        prev = None
+        for _ in range(50):
+            time.sleep(0.1)
+            msg = base.main_node.imu_handler.imu_data
+            cur = stamp_seconds(msg) if msg is not None else None
+            if cur is not None and cur == prev:
+                break
+            prev = cur
+        print(f"[pause] world settled at sim time {prev}")
+
         base.reset()
         first_imu = base.main_node.read_imu()
         print(
@@ -239,8 +292,9 @@ def main(args=None):
         )
 
         if which in ("both", "blocking"):
-            d = run_blocking(base, steps, dt)
-            r = report("blocking", d, dt, out_dir)
+            d, tp, ts, ti, raw, oid = run_blocking(base, steps, dt)
+            r = report("blocking", d, dt, out_dir, timings=(tp, ts, ti),
+                       extra={"raw_stamps": raw, "obj_ids": oid})
             if r:
                 results.append(r)
             base.reset()
