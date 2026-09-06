@@ -344,6 +344,17 @@ def plot_tracking(ax, t, actual, desired, sp):
 
 
 # ---------------------------------------------------------------------------
+def plot_oscillations(ax, t, actual, sp):
+    labels = ["Roll (X)", "Pitch (Y)", "Yaw (Z)"]
+    for i in range(3):
+        ax[i].plot(t, actual[:, i], label=f"Actual {labels[i]}")
+        ax[i].axhline(y=sp[i], linestyle="--", label=f"Setpoint {labels[i]}")
+        ax[i].set_xlabel("Time (s)")
+        ax[i].set_ylabel("Angular Velocity (rad/s)")
+        ax[i].grid(True)
+        ax[i].legend()
+
+
 def evaluate(env, controller, model, pid, setpoints, dt, tag, out_dir):
     os.makedirs(out_dir, exist_ok=True)
     rows, raw, plot_payloads = [], {}, []
@@ -413,13 +424,33 @@ def evaluate(env, controller, model, pid, setpoints, dt, tag, out_dir):
         try:
             fig, axs = plt.subplots(2, 2, figsize=(14, 10))
             axs = axs.flatten()
+            all_vals = np.concatenate([y.ravel() for (_, y, _, _) in plot_payloads])
+            y_min, y_max = float(np.min(all_vals)), float(np.max(all_vals))
+            margin = 0.05 * (y_max - y_min)
+            y_min -= margin
+            y_max += margin
             for idx, (t, y, d, sp) in enumerate(plot_payloads):
                 plot_tracking(axs[idx], t, y, d, sp)
+                axs[idx].set_ylim(y_min, y_max)
             plt.tight_layout()
             png_path = os.path.join(out_dir, f"{tag}_tracking.png")
             fig.savefig(png_path, dpi=150)
             plt.close(fig)
             print(f"wrote {png_path}")
+
+            n = len(plot_payloads)
+            fig_osc, ax_osc = plt.subplots(n, 3, figsize=(15, 3 * n))
+            if n == 1:
+                ax_osc = [ax_osc]
+            for idx, (t, y, d, sp) in enumerate(plot_payloads):
+                plot_oscillations(ax_osc[idx], t, y, sp)
+                for a in ax_osc[idx]:
+                    a.set_ylim(-1.0, 1.0)
+            plt.tight_layout()
+            osc_path = os.path.join(out_dir, f"{tag}_oscillations.png")
+            fig_osc.savefig(osc_path, dpi=150)
+            plt.close(fig_osc)
+            print(f"wrote {osc_path}")
         except Exception as e:
             print(f"[eval] plotting failed (non-fatal): {e}")
 
