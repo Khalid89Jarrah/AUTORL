@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib
 
 matplotlib.use("Agg")
+matplotlib.rcParams["axes.unicode_minus"] = True
 import matplotlib.pyplot as plt
 import pandas as pd
 import rclpy
@@ -68,14 +69,14 @@ def plot_tracking(ax, t, actual, desired, sp):
     for i in range(3):
         ax.plot(t, actual[:, i], label=f"Actual {labels[i]}")
         ax.plot(t, desired[:, i], label=f"Desired {labels[i]}", linestyle="--")
-    ax.set_title(f"Tracking FRD Setpoint {sp}")
+    ax.set_title("Tracking FRD Setpoint [" + " ".join(f"{v:.1f}" for v in sp) + "]")
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Angular Velocity (rad/s)")
     ax.grid()
-    ax.legend()
+    ax.legend(fontsize=7, loc="upper left", bbox_to_anchor=(1.02, 1.0), borderaxespad=0)
 
 
-def plot_oscillations(ax, t, actual, sp):
+def plot_oscillations(ax, t, actual, sp, ylim=None):
     labels = ["Roll (X)", "Pitch (Y)", "Yaw (Z)"]
     for i in range(3):
         ax[i].plot(t, actual[:, i], label=f"Actual {labels[i]}")
@@ -83,7 +84,9 @@ def plot_oscillations(ax, t, actual, sp):
         ax[i].set_xlabel("Time (s)")
         ax[i].set_ylabel("Angular Velocity (rad/s)")
         ax[i].grid()
-        ax[i].legend()
+        ax[i].legend(fontsize=7, loc="upper left", bbox_to_anchor=(1.02, 1.0), borderaxespad=0)
+        if ylim is not None:
+            ax[i].set_ylim(*ylim)
 
 
 @dataclass
@@ -160,7 +163,7 @@ def evaluate_pid(
     pid,
     setpoints,
     evaluation_time=30.0,
-    simulation_step_time=0.01,
+    simulation_step_time=0.004,
     csv_path="metrics_pid.csv",
 ):
     time_steps = int(evaluation_time / simulation_step_time)
@@ -284,9 +287,9 @@ def evaluate_pid(
         y_max += margin
 
         n = len(plot_payloads)
-        fig_tr, ax_tr = plt.subplots(2, 2, figsize=(14, 10))
+        fig_tr, ax_tr = plt.subplots(2, 2, figsize=(17, 10))
         ax_tr = ax_tr.flatten()
-        fig_osc, ax_osc = plt.subplots(n, 3, figsize=(15, 3 * n))
+        fig_osc, ax_osc = plt.subplots(n, 3, figsize=(19, 3 * n))
         if n == 1:
             ax_osc = [ax_osc]
 
@@ -304,7 +307,7 @@ def evaluate_pid(
             )
             ax.set_ylim(y_min, y_max)
             plot_oscillations(
-                ax_osc[idx], t_hist[:n_points], actual_hist[:n_points], sp_frd
+                ax_osc[idx], t_hist[:n_points], actual_hist[:n_points], sp_frd, ylim=(y_min, y_max)
             )
 
         plt.tight_layout()
@@ -328,10 +331,10 @@ def main(args=None):
         integ_limit=(0.5, 0.4, 0.35),
     )
     setpoints = [
-        np.array([-0.5, 0.3, -0.4], dtype=np.float32),
-        np.array([0.1, -0.2, 0.6], dtype=np.float32),
+        np.array([-0.9, 0.8, -0.8], dtype=np.float32),
+        np.array([0.7, -0.9, 1.0], dtype=np.float32),
         np.array([0.0, 0.0, 0.0], dtype=np.float32),
-        np.array([-0.3, -0.1, 0.2], dtype=np.float32),
+        np.array([-0.8, -0.7, 0.9], dtype=np.float32),
     ]
     print("Starting PID evaluation (headless)…")
     evaluate_pid(env, pid, setpoints)
