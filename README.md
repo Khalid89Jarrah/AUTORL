@@ -2,6 +2,9 @@
 
 Hybrid Reinforcement Learning (RL) training of the attitude controller using ROS 2 and Gazebo.
 
+> **Note:** This repository is for simulation and research purposes only. It is not
+> validated for real flight or integration into a flight control stack.
+
 ---
 
 ## Project Structure
@@ -46,4 +49,22 @@ BSD-3 Clause License. It also contains my own Python reimplementations based on
 my understanding of the algorithms used in the PX4 multicopter mixer and
 control-allocation system.
 
-See licenses/LICENSE.PX4 for full license details.
+See licenses/LICENSE.PX4 for full license details. The x500 model assets are licensed under BSD-3 by Rudis Laboratories; see the
+LICENSE files in src/sensor_interaction/resources/autorl_drone/.
+
+## Citation
+
+If you use this code in your research, please cite:
+
+```bibtex
+@article{jarrah2026autorl,
+  title={AutoRL: A Tightly Synchronized ROS2--Gazebo Pipeline for Offline-Trained Reinforcement Learning-Based Multirotor Attitude Control},
+  author={Jarrah, Khaled and Rawashdeh, Osamah},
+  journal={Aerospace},
+  volume={13},
+  number={9},
+  pages={825},
+  year={2026},
+  publisher={MDPI}
+}
+```

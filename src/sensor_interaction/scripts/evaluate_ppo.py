@@ -6,6 +6,7 @@ import numpy as np
 import matplotlib
 
 matplotlib.use("Agg")
+matplotlib.rcParams["axes.unicode_minus"] = True
 import matplotlib.pyplot as plt
 import pandas as pd
 import rclpy
@@ -32,12 +33,12 @@ def plot_tracking(ax, time, actual_frd, desired_frd, eval_setpoint_frd):
         ax.plot(time, desired_frd[:, i], label=f"Desired {labels[i]}", linestyle="--")
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Angular Velocity (rad/s)")
-    ax.set_title(f"Tracking FRD Setpoint {eval_setpoint_frd}")
+    ax.set_title("Tracking FRD Setpoint [" + " ".join(f"{v:.1f}" for v in eval_setpoint_frd) + "]")
     ax.grid(True)
-    ax.legend()
+    ax.legend(fontsize=7, loc="upper left", bbox_to_anchor=(1.02, 1.0), borderaxespad=0)
 
 
-def plot_oscillations(ax, time, actual_frd, eval_setpoint_frd):
+def plot_oscillations(ax, time, actual_frd, eval_setpoint_frd, ylim=None):
     labels = ["Roll (X)", "Pitch (Y)", "Yaw (Z)"]
     for i in range(3):
         ax[i].plot(time, actual_frd[:, i], label=f"Actual {labels[i]}")
@@ -47,7 +48,9 @@ def plot_oscillations(ax, time, actual_frd, eval_setpoint_frd):
         ax[i].set_xlabel("Time (s)")
         ax[i].set_ylabel("Angular Velocity (rad/s)")
         ax[i].grid(True)
-        ax[i].legend()
+        ax[i].legend(fontsize=7, loc="upper left", bbox_to_anchor=(1.02, 1.0), borderaxespad=0)
+        if ylim is not None:
+            ax[i].set_ylim(*ylim)
 
 
 @dataclass
@@ -121,7 +124,7 @@ def evaluate_ppo(
     model,
     eval_setpoints_frd,
     evaluation_time=30.0,
-    simulation_step_time=0.01,
+    simulation_step_time=0.004,
     settle_steps=3,
     csv_path="metrics_ppo.csv",
 ):
@@ -250,7 +253,7 @@ def evaluate_ppo(
         y_max += margin
 
         # Tracking plots
-        fig_tr, ax_tr = plt.subplots(2, 2, figsize=(14, 10))
+        fig_tr, ax_tr = plt.subplots(2, 2, figsize=(17, 10))
         ax_tr = ax_tr.flatten()
 
         for idx, (t_base, actual_hist, desired_hist, sp_frd) in enumerate(
@@ -267,13 +270,13 @@ def evaluate_ppo(
 
         # Oscillations plots
         n = len(plot_payloads)
-        fig_osc, ax_osc = plt.subplots(n, 3, figsize=(15, 3 * n))
+        fig_osc, ax_osc = plt.subplots(n, 3, figsize=(19, 3 * n))
         if n == 1:
             ax_osc = [ax_osc]
 
         for idx, (t_base, actual_hist, _, sp_frd) in enumerate(plot_payloads):
             plot_oscillations(
-                ax_osc[idx], t_base[: len(actual_hist)], actual_hist, sp_frd
+                ax_osc[idx], t_base[: len(actual_hist)], actual_hist, sp_frd, ylim=(y_min, y_max)
             )
 
         plt.tight_layout()
@@ -298,10 +301,10 @@ def main(args=None):
     model = PPO.load(model_path, device="cpu")
 
     setpoints = [
-        np.array([-0.5, 0.3, -0.4], dtype=np.float32),
-        np.array([0.1, -0.2, 0.6], dtype=np.float32),
+        np.array([-0.9, 0.8, -0.8], dtype=np.float32),
+        np.array([0.7, -0.9, 1.0], dtype=np.float32),
         np.array([0.0, 0.0, 0.0], dtype=np.float32),
-        np.array([-0.3, -0.1, 0.2], dtype=np.float32),
+        np.array([-0.8, -0.7, 0.9], dtype=np.float32),
     ]
 
     try:
